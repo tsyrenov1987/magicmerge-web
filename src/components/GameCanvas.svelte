@@ -4,6 +4,7 @@
   import { gameState, resetGame } from "$lib/store/game";
   import { getPixiApp, destroyPixiApp } from "$lib/pixi/app";
   import { BoardScene } from "$lib/pixi/boardScene";
+  import { Lily } from "$lib/pixi/lily";
   import { applyDrop, applyGeneratorTap, applyEnergyTick } from "$lib/game/actions";
   import { tt, locale } from "$lib/i18n";
   import { haptic, hapticNotify, tg } from "$lib/telegram";
@@ -11,6 +12,7 @@
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
+  let lily: Lily | undefined;
   let mounted = false;
   let resizeObserver: ResizeObserver | undefined;
   let energyTickInterval: ReturnType<typeof setInterval> | undefined;
@@ -135,6 +137,15 @@
       onGeneratorTap: handleGeneratorTap,
     });
 
+    // Lily lives in her own top-level container so she always renders above
+    // the board and stays put when the board rebuilds.
+    lily = new Lily({
+      parent: app.stage,
+      x: width - 56,
+      y: height - 56,
+      size: 64,
+    });
+
     const unsubscribe = gameState.subscribe((s) => {
       scene?.resize(
         mountTarget.clientWidth,
@@ -151,6 +162,7 @@
       const current = get(gameState);
       scene?.resize(w, h, current.boardCols, current.inventory.length);
       scene?.rebuild(current.boardCols, current.board, current.inventory);
+      lily?.moveTo(w - 56, h - 56);
     });
     resizeObserver.observe(mountTarget);
 
@@ -180,6 +192,8 @@
     resizeObserver?.disconnect();
     const unsubscribe = await unsubscribePromise;
     unsubscribe?.();
+    lily?.destroy();
+    lily = undefined;
     scene?.destroy();
     scene = undefined;
     destroyPixiApp();
