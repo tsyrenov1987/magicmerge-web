@@ -5,6 +5,7 @@
   import { getPixiApp, destroyPixiApp } from "$lib/pixi/app";
   import { BoardScene } from "$lib/pixi/boardScene";
   import { Lily } from "$lib/pixi/lily";
+  import { findMergePair } from "$lib/game/hint";
   import { applyDrop, applyGeneratorTap, applyEnergyTick } from "$lib/game/actions";
   import { tt, locale } from "$lib/i18n";
   import { haptic, hapticNotify, tg } from "$lib/telegram";
@@ -16,6 +17,13 @@
   let mounted = false;
   let resizeObserver: ResizeObserver | undefined;
   let energyTickInterval: ReturnType<typeof setInterval> | undefined;
+  let lilyBehaviorInterval: ReturnType<typeof setInterval> | undefined;
+
+  // Behavior tuning
+  const ATTENTION_DELAY_MS = 5000;
+  const SLEEPY_DELAY_MS = 45000;
+  let lastInteractionMs = performance.now();
+  let lilyAwayFromHome = false;
 
   const labelLevel = $derived(tt($locale, "Уровень", "Level", "Nivel"));
   const labelCoins = $derived(tt($locale, "Монеты", "Coins", "Monedas"));
@@ -72,21 +80,41 @@
     if (outcome.kind === "noop") return false;
 
     if (outcome.kind === "merge") {
+      // Capture the merge spot BEFORE the state update — once set, the
+      // rebuild replaces sprites, but slot world centers stay valid since
+      // they're keyed by slot index, not item id.
+      const mergeSpot = scene?.slotWorldCenter(outcome.to);
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
         gameState.set(next);
         hapticNotify("success");
+        if (mergeSpot) lily?.celebrate(mergeSpot.x, mergeSpot.y);
       });
       haptic("heavy");
+      noteInteraction();
       return true;
     }
 
     if (outcome.kind === "swap" || outcome.kind === "move") {
       gameState.set(next);
       haptic("light");
+      noteInteraction();
       return true;
     }
 
     return false;
+  }
+
+  /** Reset the activity timer + send Lily home if she's away. */
+  function noteInteraction() {
+    lastInteractionMs = performance.now();
+    if (lilyAwayFromHome && lily) {
+      lily.setMood("idle");
+      lily.flyHome(() => {
+        lilyAwayFromHome = false;
+      });
+    } else {
+      lily?.setMood("idle");
+    }
   }
 
   /** Tap on a generator → spawn a new item. */
@@ -117,6 +145,7 @@
     }
     // Pop animation runs after the next rebuild() landed by the store subscription.
     queueMicrotask(() => scene?.playSpawnAnim(outcome.idx));
+    noteInteraction();
     return true;
   }
 
@@ -177,6 +206,9 @@
       }
     }, 2000);
 
+    // Lily behavior — checked at 1Hz, cheap.
+    lilyBehaviorInterval = setInterval(updateLilyBehavior, 1000);
+
     mounted = true;
     return unsubscribe;
   }
@@ -187,8 +219,40 @@
     unsubscribePromise = setupPixi();
   });
 
+  /**
+   * Idle-time behavior driver. Inspects gameState + activity timer and
+   * nudges Lily into attention / sleepy / idle as appropriate.
+   */
+  function updateLilyBehavior() {
+    if (!lily || !scene) return;
+    const idleFor = performance.now() - lastInteractionMs;
+    const state = get(gameState);
+
+    if (idleFor > SLEEPY_DELAY_MS) {
+      if (!lilyAwayFromHome) lily.setMood("sleepy");
+      return;
+    }
+
+    if (idleFor > ATTENTION_DELAY_MS) {
+      const pair = findMergePair(state.board, state.boardCols);
+      if (pair) {
+        const targetPos = scene.slotWorldCenter(pair.toIdx);
+        if (targetPos) {
+          if (!lilyAwayFromHome) {
+            lily.setMood("attention");
+            lily.flyTo(targetPos.x, targetPos.y);
+            lilyAwayFromHome = true;
+          }
+          return;
+        }
+      }
+      // No pair available — Lily just hangs out, no attention seek.
+    }
+  }
+
   onDestroy(async () => {
     if (energyTickInterval) clearInterval(energyTickInterval);
+    if (lilyBehaviorInterval) clearInterval(lilyBehaviorInterval);
     resizeObserver?.disconnect();
     const unsubscribe = await unsubscribePromise;
     unsubscribe?.();

@@ -489,6 +489,22 @@ export class BoardScene {
     });
   }
 
+  /**
+   * Public lookup: world-space (stage-relative) center of a slot.
+   * Used by Lily / dialogue bubbles / future hint overlays to position
+   * themselves relative to board content without needing scene internals.
+   * Returns null for invalid indices.
+   */
+  slotWorldCenter(slotIdx: number): { x: number; y: number } | null {
+    if (slotIdx < 0 || slotIdx >= this.slots.length) return null;
+    const slot = this.slots[slotIdx];
+    if (!slot) return null;
+    return {
+      x: this.root.x + slot.cx,
+      y: this.root.y + slot.cy,
+    };
+  }
+
   /** Brief celebration on a newly-spawned item. */
   playSpawnAnim(idx: number): void {
     const sprite = this.spriteAt[idx];
