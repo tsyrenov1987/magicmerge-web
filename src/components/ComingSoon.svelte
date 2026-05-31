@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { locale, t, setLocale, type Locale } from "$lib/i18n";
+  import { locale, tt, setLocale, type Locale } from "$lib/i18n";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
 
+  // Reactive: derives re-evaluate when $locale changes
   const greeting = $derived(
     user
-      ? t(`Привет, ${user.first_name}!`, `Hi, ${user.first_name}!`, `¡Hola, ${user.first_name}!`)
-      : t("Привет!", "Hi there!", "¡Hola!")
+      ? tt($locale, `Привет, ${user.first_name}!`, `Hi, ${user.first_name}!`, `¡Hola, ${user.first_name}!`)
+      : tt($locale, "Привет!", "Hi there!", "¡Hola!")
   );
 
   const tagline = $derived(
-    t(
+    tt(
+      $locale,
       "Уютная игра-слияние с Лили",
       "A cozy merge puzzle with Lily",
       "Un puzzle de fusiones acogedor con Lily"
@@ -18,11 +20,12 @@
   );
 
   const status = $derived(
-    t("Скоро запуск.", "Coming soon.", "Próximamente.")
+    tt($locale, "Скоро запуск.", "Coming soon.", "Próximamente.")
   );
 
   const tryNow = $derived(
-    t(
+    tt(
+      $locale,
       "Уже доступно в App Store для iPhone и iPad",
       "Already on the App Store for iPhone and iPad",
       "Ya disponible en la App Store para iPhone y iPad"

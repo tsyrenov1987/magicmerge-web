@@ -1,10 +1,13 @@
 /**
- * Localization — mirrors the iOS `Res.t(ru, en, es)` API exactly so we can
- * paste-port strings 1:1 from the Swift codebase.
+ * Localization — mirrors the iOS `Res.t(ru, en, es)` API.
  *
- * Usage:
- *   t("Слияние", "Merge", "Fusión")     // returns matching string
- *   setLocale("ru")                       // global locale override
+ * Two ways to call:
+ *   1. In a Svelte template, derive from $locale to react:
+ *        const greeting = $derived($locale === "ru" ? "Привет" : ...);
+ *      OR use the reactive helper:
+ *        const greeting = $derived(tt($locale, "Привет", "Hi", "Hola"));
+ *   2. From plain TS (non-reactive), `t()` reads current locale at call time:
+ *        t("Слияние", "Merge", "Fusión")     // returns matching string
  *
  * On first call we auto-detect the locale from TG, then user can override.
  */
@@ -35,12 +38,20 @@ export function setLocale(next: Locale): void {
 }
 
 /**
- * Direct string picker — mirrors `Res.t` in iOS Swift codebase.
- * Use inside reactive contexts via `$locale` to trigger re-render.
+ * Reactive picker — pass `$locale` explicitly so Svelte tracks it.
+ * Use inside `$derived` blocks for reactive UI.
  */
-export function t(ru: string, en: string, es: string): string {
-  const current = get(locale);
+export function tt(current: Locale, ru: string, en: string, es: string): string {
   if (current === "ru") return ru;
   if (current === "es") return es;
   return en;
+}
+
+/**
+ * Non-reactive picker — reads current locale at call time. Use only from
+ * code paths that don't need to re-render on locale change (logs, alerts,
+ * one-shot strings). For Svelte templates, prefer `tt($locale, ...)`.
+ */
+export function t(ru: string, en: string, es: string): string {
+  return tt(get(locale), ru, en, es);
 }

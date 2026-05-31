@@ -87,8 +87,19 @@ export function tg(): TelegramWebApp | undefined {
   return window.Telegram?.WebApp;
 }
 
+/**
+ * True iff the page is actually running inside the Telegram client.
+ *
+ * Note: `window.Telegram.WebApp` exists even in a regular browser as soon
+ * as we load the telegram-web-app.js script tag — so checking the SDK's
+ * presence is not enough. The reliable signal is `initData`: outside TG
+ * it's an empty string. Inside TG it's a signed query string with auth
+ * data and the user object.
+ */
 export function isInTelegram(): boolean {
-  return tg() !== undefined;
+  const t = tg();
+  if (!t) return false;
+  return typeof t.initData === "string" && t.initData.length > 0;
 }
 
 export function tgUser(): TelegramUser | undefined {
