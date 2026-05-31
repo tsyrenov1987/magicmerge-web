@@ -146,17 +146,13 @@ export class BoardScene {
     this.root.y = (height - totalHeight) / 2;
 
     // Store useful layout for slot lookups
-    this._boardWidth = boardWidth;
     this._boardHeight = boardHeight;
     this._inventoryY = boardHeight + 16;
-    this._inventoryWidth = inventoryWidth;
     this._inventoryOffsetX = (boardWidth - inventoryWidth) / 2;
   }
 
-  private _boardWidth = 0;
   private _boardHeight = 0;
   private _inventoryY = 0;
-  private _inventoryWidth = 0;
   private _inventoryOffsetX = 0;
 
   /** Rebuild from current state. Cancels any in-flight drag. */
@@ -176,6 +172,10 @@ export class BoardScene {
 
     this.cellsLayer.removeChildren();
     this.itemsLayer.removeChildren();
+    // dragLayer is normally empty between drags, but a sprite mid-merge-anim
+    // can be parked here when the store update fires. Wipe defensively so
+    // we never leak orphans across rebuilds.
+    this.dragLayer.removeChildren();
     const totalSlots = this.boardCellCount + this.inventorySize;
     this.slots = new Array(totalSlots);
     this.cellGraphics = new Array(totalSlots);
@@ -319,16 +319,20 @@ export class BoardScene {
 
   private handlePointerUp = (): void => {
     if (!this.dragging) return;
-    const { fromIdx, hoverIdx, movedPastThreshold, startTimeMs } = this.dragging;
+    // Snapshot drag state and CLEAR `this.dragging` first. onDrop may
+    // synchronously trigger a state update → store subscription →
+    // rebuild() → cancelDrag(); without the early clear we'd null out
+    // a future drag from another pointer reaching us mid-callback.
     const dragInfo = this.dragging;
+    this.dragging = null;
+    const { fromIdx, hoverIdx, movedPastThreshold, startTimeMs } = dragInfo;
     const elapsed = performance.now() - startTimeMs;
     const isTap = !movedPastThreshold && elapsed < TAP_THRESHOLD_MS;
 
     if (hoverIdx >= 0) this.updateCellHighlight(hoverIdx, false);
 
-    // TAP path
+    // TAP path — generators only; other taps are reserved for 2.B+
     if (isTap) {
-      this.dragging = null;
       if (this.isGeneratorAt[fromIdx] && fromIdx < this.boardCellCount) {
         this.onGeneratorTap(fromIdx);
       }
@@ -337,8 +341,7 @@ export class BoardScene {
 
     // DRAG path
     if (!movedPastThreshold) {
-      // Held in place too long — just release without action
-      this.dragging = null;
+      // Long press without movement — release without action
       return;
     }
     if (hoverIdx < 0 || hoverIdx === fromIdx) {
@@ -346,7 +349,6 @@ export class BoardScene {
       return;
     }
     const accepted = this.onDrop(fromIdx, hoverIdx);
-    this.dragging = null;
     if (!accepted) {
       this.bounceBack(dragInfo);
     }

@@ -13,8 +13,14 @@ import {
   LUCKY_CHEST_CHANCE,
   ENERGY_REGEN_MS,
 } from "./logic";
-import { makeItem, makeLuckyChest, lineOf, type BoardItem } from "./boardItem";
-import { LINE_IDS, type LineId } from "./lines";
+import {
+  makeItem,
+  makeLuckyChest,
+  lineOf,
+  isGenerator,
+  type BoardItem,
+} from "./boardItem";
+import { LINE_IDS, lineFromEmoji, type LineId } from "./lines";
 import type { GameUiState } from "$lib/store/game";
 
 export type DropOutcome =
@@ -73,6 +79,11 @@ export function applyDrop(
   const source = readCell(state, fromIdx);
   const target = readCell(state, toIdx);
   if (!source) {
+    return { next: state, outcome: { kind: "noop", reason: "invalid" } };
+  }
+  // Generators are board fixtures — they don't move and they don't get
+  // displaced. Drag onto/from a generator is a no-op.
+  if (isGenerator(source) || isGenerator(target)) {
     return { next: state, outcome: { kind: "noop", reason: "invalid" } };
   }
 
@@ -185,12 +196,11 @@ export function applyGeneratorTap(
 }
 
 function pickRandomLine(rng: () => number, preferEmoji?: string): LineId {
+  // If the generator is locked to a specific line (iOS sets this on
+  // some boards) — respect it. Else uniform draw across all 9 lines.
   if (preferEmoji) {
-    for (const id of LINE_IDS) {
-      // (line emoji match handled by lineFromEmoji elsewhere; here we want
-      // the LineId for spawning, so reverse-lookup briefly)
-      // Avoiding the import cycle by inlining the test below.
-    }
+    const preferred = lineFromEmoji(preferEmoji);
+    if (preferred) return preferred;
   }
   const i = Math.floor(rng() * LINE_IDS.length);
   return LINE_IDS[i] ?? "roses";

@@ -140,10 +140,11 @@ export class Lily {
     const flutter = 0.85 + 0.15 * Math.sin(this.elapsed / 55);
     this.leftWing.scale.x = flutter;
     this.rightWing.scale.x = flutter;
-    // Glow shimmer — slow alpha + slight scale pulse
-    const glowPulse = 0.85 + 0.15 * Math.sin(this.elapsed / 600);
-    this.glow.scale.set(glowPulse);
-    this.glow.alpha = 0.12 + 0.08 * (glowPulse - 0.85) / 0.15;
+    // Glow shimmer — slow scale pulse + matching alpha breathe.
+    // Sin range is [-1, 1]; convert to [0, 1] then map both visuals.
+    const shimmer01 = 0.5 + 0.5 * Math.sin(this.elapsed / 600);
+    this.glow.scale.set(0.85 + 0.15 * shimmer01);
+    this.glow.alpha = 0.12 + 0.08 * shimmer01;
   }
 
   /** Reposition the fairy's "home" point (e.g. after viewport resize). */
