@@ -4,7 +4,9 @@
   import { gameState, resetGame } from "$lib/store/game";
   import { getPixiApp, destroyPixiApp } from "$lib/pixi/app";
   import { BoardScene } from "$lib/pixi/boardScene";
+  import { applyDrop } from "$lib/game/actions";
   import { tt, locale } from "$lib/i18n";
+  import { haptic, hapticNotify } from "$lib/telegram";
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
@@ -24,6 +26,35 @@
     )
   );
 
+  /** Called by BoardScene when a drag ends on a valid target.
+   *  Returns true to mean "I handled it, please rebuild from new state". */
+  function handleDrop(fromIdx: number, toIdx: number): boolean {
+    const current = get(gameState);
+    const { next, outcome } = applyDrop(current, fromIdx, toIdx);
+    if (outcome.kind === "noop") {
+      return false;
+    }
+
+    if (outcome.kind === "merge") {
+      // Punch animation BEFORE the store update so the old sprites are still
+      // mounted. Then we apply the state and rebuild.
+      scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
+        gameState.set(next);
+        hapticNotify("success");
+      });
+      haptic("heavy");
+      return true;
+    }
+
+    if (outcome.kind === "swap" || outcome.kind === "move") {
+      gameState.set(next);
+      haptic("light");
+      return true;
+    }
+
+    return false;
+  }
+
   async function setupPixi() {
     if (!mountTarget) return;
     const app = await getPixiApp(mountTarget);
@@ -37,14 +68,13 @@
       width,
       height,
       margin: 12,
+      onDrop: handleDrop,
     });
 
-    // Initial render + subscribe to subsequent state changes
     const unsubscribe = gameState.subscribe((s) => {
       scene?.rebuild(s.boardCols, s.board);
     });
 
-    // Re-layout on viewport changes (TG resize, rotation)
     resizeObserver = new ResizeObserver(() => {
       const w = mountTarget.clientWidth;
       const h = mountTarget.clientHeight;
@@ -115,6 +145,8 @@
     height: 100dvh;
     background: linear-gradient(180deg, #1A1424 0%, #2B1B3D 100%);
     color: #fff;
+    touch-action: none; /* prevent scroll-pan on drag */
+    user-select: none;
   }
   header {
     display: grid;
@@ -145,7 +177,6 @@
     width: 100%;
     overflow: hidden;
   }
-  /* PixiJS appends a <canvas> child; make sure it fills the host */
   .canvas-host :global(canvas) {
     display: block;
     width: 100%;
