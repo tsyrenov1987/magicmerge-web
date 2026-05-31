@@ -1,5 +1,6 @@
 <script lang="ts">
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
+  import { setView } from "$lib/store/ui";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
 
@@ -32,8 +33,29 @@
     )
   );
 
+  const previewCta = $derived(
+    tt(
+      $locale,
+      "Попробовать прототип",
+      "Try the prototype",
+      "Probar el prototipo"
+    )
+  );
+  const previewNote = $derived(
+    tt(
+      $locale,
+      "ранняя сборка · только доска и слияния",
+      "early build · board + merges only",
+      "versión temprana · solo tablero y fusiones"
+    )
+  );
+
   function pick(next: Locale) {
     setLocale(next);
+  }
+
+  function openPreview() {
+    setView("game");
   }
 </script>
 
@@ -66,6 +88,13 @@
         {code.toUpperCase()}
       </button>
     {/each}
+  </div>
+
+  <div class="preview">
+    <button type="button" class="preview-cta" onclick={openPreview}>
+      {previewCta}
+    </button>
+    <p class="preview-note">{previewNote}</p>
   </div>
 
   {#if !inTg}
@@ -138,6 +167,35 @@
   .lang-picker button.active {
     background: rgba(232, 164, 242, 0.2);
     color: #E8A4F2;
+  }
+  .preview {
+    margin-top: 32px;
+  }
+  .preview-cta {
+    background: linear-gradient(135deg, #E8A4F2 0%, #B47AD9 100%);
+    color: #1A1424;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    box-shadow: 0 8px 24px rgba(180, 122, 217, 0.32);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .preview-cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px rgba(180, 122, 217, 0.4);
+  }
+  .preview-cta:active {
+    transform: translateY(0);
+  }
+  .preview-note {
+    margin: 10px 0 0;
+    font-size: 12px;
+    opacity: 0.5;
+    font-style: italic;
   }
   .dev-note {
     margin-top: 24px;

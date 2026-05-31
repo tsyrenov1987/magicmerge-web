@@ -7,6 +7,7 @@
   import { applyDrop } from "$lib/game/actions";
   import { tt, locale } from "$lib/i18n";
   import { haptic, hapticNotify } from "$lib/telegram";
+  import { setView } from "$lib/store/ui";
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
@@ -17,6 +18,7 @@
   const labelCoins = $derived(tt($locale, "Монеты", "Coins", "Monedas"));
   const labelEnergy = $derived(tt($locale, "Энергия", "Energy", "Energía"));
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
+  const labelBack = $derived(tt($locale, "Назад", "Back", "Atrás"));
   const confirmReset = $derived(
     tt(
       $locale,
@@ -108,10 +110,17 @@
       resetGame();
     }
   }
+
+  function handleBack() {
+    setView("landing");
+  }
 </script>
 
 <div class="game-root">
   <header>
+    <button type="button" class="back" onclick={handleBack} aria-label={labelBack}>
+      ‹
+    </button>
     <div class="stat">
       <span class="stat-label">{labelLevel}</span>
       <span class="stat-value">{$gameState.level}</span>
@@ -150,10 +159,29 @@
   }
   header {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 32px repeat(3, 1fr);
+    align-items: center;
     gap: 4px;
     padding: 12px 16px;
     background: rgba(0, 0, 0, 0.18);
+  }
+  .back {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .back:hover {
+    background: rgba(255, 255, 255, 0.13);
   }
   .stat {
     display: flex;
