@@ -13,7 +13,7 @@ import {
   ENERGY_MAX,
   boardCols,
 } from "$lib/game/logic";
-import { makeItem, type BoardItem } from "$lib/game/boardItem";
+import { makeItem, makeGenerator, type BoardItem } from "$lib/game/boardItem";
 import { LINE_IDS } from "$lib/game/lines";
 
 export interface GameUiState {
@@ -31,7 +31,7 @@ export interface GameUiState {
 }
 
 const STORAGE_KEY = "magicmerge.game";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 interface SavedShape {
   v?: number;
@@ -39,20 +39,17 @@ interface SavedShape {
 }
 
 /**
- * Phase 1 seed: place a handful of items on the starting 4×4 board so we
- * can see the renderer working before drag/drop is implemented. Removed
- * once Phase 1.C lands proper spawn flow.
+ * Phase 1.D seed: generator pinned at slot (1,1) — center of a 4×4 board,
+ * leaving plenty of room for spawned items. A small starting pair on the
+ * top row teaches the merge mechanic before the player taps the generator.
  */
 function seedBoard(cols: number): Array<BoardItem | null> {
   const cells = new Array<BoardItem | null>(cols * cols).fill(null);
-  // Place 6 items across 3 lines, mixed levels, so we can verify line colors
-  // and tier rendering in the canvas.
   cells[0] = makeItem("roses", 1);
   cells[1] = makeItem("roses", 1);
-  cells[3] = makeItem("forge", 2);
-  cells[5] = makeItem("fae", 1);
-  cells[6] = makeItem("crystals", 3);
-  cells[10] = makeItem("ocean", 2);
+  // Generator at the center-ish — index 5 on a 4×4 board (row 1, col 1)
+  const generatorIdx = cols + 1;
+  cells[generatorIdx] = makeGenerator(1);
   return cells;
 }
 

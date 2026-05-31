@@ -1,36 +1,34 @@
 /**
- * Board scene — square N×N grid with interactive item sprites.
+ * Board scene — square N×N grid plus inventory row, with interactive items.
  *
- * Architecture:
- *   - cellsLayer: static rounded squares, one per slot
- *   - itemsLayer: BoardItem sprites positioned by slot index
- *   - dragLayer: while a drag is in flight, the lifted sprite lives here
- *     so it renders above all other items
+ * Unified address space:
+ *   slot 0 .. cols²-1            → board
+ *   slot cols² .. cols²+invSize-1 → inventory
  *
- * Sprite identity is keyed by slot index, not BoardItem.id, because the
- * rebuild() path wipes and rebuilds. (1.D will switch to id-keyed diff'd
- * updates for animations across spawn.)
+ * Drag/drop and generator-tap both surface via callbacks the GameCanvas
+ * wires to actions.applyDrop / applyGeneratorTap.
  */
 
 import { Container, Graphics, FederatedPointerEvent } from "pixi.js";
 import { createItemSprite } from "./itemSprite";
 import { tweenTo, tweenAlpha, squashPulse, ease } from "./tween";
-import type { BoardItem } from "$lib/game/boardItem";
+import { isGenerator, type BoardItem } from "$lib/game/boardItem";
 
 export interface BoardSceneOptions {
   parent: Container;
   width: number;
   height: number;
   margin?: number;
-  /** Called when player drops `from → to`. Scene already played pickup + back-bounce.
-   *  Return true to acknowledge mutation (scene will re-render from new state);
-   *  return false to bounce the dragged sprite back. */
+  /** Drag/drop ended — caller resolves the move. Return true to acknowledge. */
   onDrop: (fromIdx: number, toIdx: number) => boolean;
+  /** Tap on a generator (board only) — caller spawns an item. */
+  onGeneratorTap: (boardIdx: number) => boolean;
 }
 
 const CELL_BG = 0x2c2240;
 const CELL_BG_HOVER = 0x4a3a70;
 const CELL_BORDER = 0x423560;
+const INVENTORY_BG = 0x1f1733;
 const CORNER_RADIUS_RATIO = 0.18;
 const CELL_GAP_RATIO = 0.06;
 const ITEM_INSET_RATIO = 0.78;
@@ -40,6 +38,8 @@ const PICKUP_DURATION = 120;
 const DROP_BACK_DURATION = 220;
 const MERGE_PULSE_DURATION = 280;
 const MERGE_FADE_DURATION = 180;
+const TAP_THRESHOLD_PX = 8;
+const TAP_THRESHOLD_MS = 250;
 
 interface SlotPos {
   cx: number;
@@ -54,15 +54,20 @@ export class BoardScene {
   private dragLayer: Container;
   private cellSize = 0;
   private boardCols = 0;
+  private boardCellCount = 0;
+  private inventorySize = 0;
   private margin: number;
   private onDrop: BoardSceneOptions["onDrop"];
+  private onGeneratorTap: BoardSceneOptions["onGeneratorTap"];
 
-  /** Per-cell positions in local space */
+  /** Per-slot positions (board first, then inventory) in local space */
   private slots: SlotPos[] = [];
-  /** Per-cell cell-rect Graphics (for hover highlight) */
+  /** Per-slot cell-rect Graphics */
   private cellGraphics: Graphics[] = [];
-  /** Per-cell item sprite ref. null when slot is empty. */
+  /** Per-slot item sprite refs */
   private spriteAt: Array<Container | null> = [];
+  /** True if slot is a generator (used to distinguish tap vs drag) */
+  private isGeneratorAt: boolean[] = [];
 
   /** Drag state */
   private dragging:
@@ -72,6 +77,10 @@ export class BoardScene {
         origin: SlotPos;
         pointerOffset: { dx: number; dy: number };
         hoverIdx: number;
+        startX: number;
+        startY: number;
+        startTimeMs: number;
+        movedPastThreshold: boolean;
       }
     | null = null;
 
@@ -79,6 +88,7 @@ export class BoardScene {
     this.parent = opts.parent;
     this.margin = opts.margin ?? 16;
     this.onDrop = opts.onDrop;
+    this.onGeneratorTap = opts.onGeneratorTap;
 
     this.root = new Container();
     this.root.label = "board";
@@ -95,7 +105,6 @@ export class BoardScene {
     this.root.addChild(this.itemsLayer);
     this.root.addChild(this.dragLayer);
 
-    // Scene-level pointer handling for active drags
     this.parent.eventMode = "static";
     this.parent.on("globalpointermove", this.handlePointerMove);
     this.parent.on("pointerup", this.handlePointerUp);
@@ -104,36 +113,74 @@ export class BoardScene {
     this.resize(opts.width, opts.height);
   }
 
-  /** Compute layout for available area. Does NOT redraw cells/items. */
-  resize(width: number, height: number, cols?: number): void {
-    if (cols !== undefined) this.boardCols = cols;
+  resize(width: number, height: number, cols?: number, invSize?: number): void {
+    if (cols !== undefined) {
+      this.boardCols = cols;
+      this.boardCellCount = cols * cols;
+    }
+    if (invSize !== undefined) this.inventorySize = invSize;
     if (this.boardCols === 0) return;
 
-    const available = Math.min(width, height) - this.margin * 2;
-    this.cellSize = available / this.boardCols;
+    // Reserve a strip at the bottom for inventory. The inventory row's
+    // height = one cell of the board, so we compute layout treating board
+    // as a square and inventory as a row below it.
+    const reservedForInventory = this.inventorySize > 0 ? 1 : 0;
+    const sideHeight = height - this.margin * 2;
+    const sideWidth = width - this.margin * 2;
+    const heightForBoardAndInventory =
+      sideHeight - 16 * reservedForInventory; // gap between board and inventory
+    // Solve: cellSize × (boardCols + reservedForInventory) <= height
+    //        cellSize × boardCols <= width
+    const cellByH = heightForBoardAndInventory / (this.boardCols + reservedForInventory);
+    const cellByW = sideWidth / this.boardCols;
+    this.cellSize = Math.min(cellByH, cellByW);
 
-    this.root.x = (width - available) / 2;
-    this.root.y = (height - available) / 2;
+    // Center board horizontally, inventory horizontally; vertical layout
+    // pins board to top, inventory below with a small gap.
+    const boardWidth = this.cellSize * this.boardCols;
+    const boardHeight = this.cellSize * this.boardCols;
+    const inventoryWidth = this.cellSize * Math.min(this.inventorySize, this.boardCols);
+    const totalHeight = boardHeight + (reservedForInventory ? this.cellSize + 16 : 0);
+
+    this.root.x = (width - boardWidth) / 2;
+    this.root.y = (height - totalHeight) / 2;
+
+    // Store useful layout for slot lookups
+    this._boardWidth = boardWidth;
+    this._boardHeight = boardHeight;
+    this._inventoryY = boardHeight + 16;
+    this._inventoryWidth = inventoryWidth;
+    this._inventoryOffsetX = (boardWidth - inventoryWidth) / 2;
   }
 
-  /** Wipe and redraw the entire board with the given state. */
-  rebuild(cols: number, items: Array<BoardItem | null>): void {
-    if (cols * cols !== items.length) {
-      console.warn(
-        `[boardScene] cols²=${cols * cols} != items.length=${items.length}`
-      );
+  private _boardWidth = 0;
+  private _boardHeight = 0;
+  private _inventoryY = 0;
+  private _inventoryWidth = 0;
+  private _inventoryOffsetX = 0;
+
+  /** Rebuild from current state. Cancels any in-flight drag. */
+  rebuild(
+    cols: number,
+    boardItems: Array<BoardItem | null>,
+    inventoryItems: Array<BoardItem | null>
+  ): void {
+    if (cols * cols !== boardItems.length) {
+      console.warn(`[boardScene] cols²=${cols * cols} != boardItems.length=${boardItems.length}`);
     }
     this.boardCols = cols;
+    this.boardCellCount = cols * cols;
+    this.inventorySize = inventoryItems.length;
 
-    // If a drag is in progress, cancel it before wiping — the lifted sprite
-    // would be orphaned otherwise.
     this.cancelDrag(false);
 
     this.cellsLayer.removeChildren();
     this.itemsLayer.removeChildren();
-    this.slots = [];
-    this.cellGraphics = [];
-    this.spriteAt = new Array(items.length).fill(null);
+    const totalSlots = this.boardCellCount + this.inventorySize;
+    this.slots = new Array(totalSlots);
+    this.cellGraphics = new Array(totalSlots);
+    this.spriteAt = new Array(totalSlots).fill(null);
+    this.isGeneratorAt = new Array(totalSlots).fill(false);
 
     const cellSize = this.cellSize;
     const gap = cellSize * CELL_GAP_RATIO;
@@ -141,125 +188,190 @@ export class BoardScene {
     const innerSize = cellSize - gap;
     const itemSize = innerSize * ITEM_INSET_RATIO;
 
-    for (let i = 0; i < items.length; i++) {
+    // --- Board cells ---
+    for (let i = 0; i < boardItems.length; i++) {
       const row = Math.floor(i / cols);
       const col = i % cols;
       const cx = col * cellSize + cellSize / 2;
       const cy = row * cellSize + cellSize / 2;
-      this.slots.push({ cx, cy });
+      this.slots[i] = { cx, cy };
 
       const cell = new Graphics();
       this.drawCellGraphic(cell, cx, cy, innerSize, corner, false);
       this.cellsLayer.addChild(cell);
-      this.cellGraphics.push(cell);
+      this.cellGraphics[i] = cell;
 
-      const item = items[i];
+      const item = boardItems[i];
       if (item) {
-        const sprite = createItemSprite(item, itemSize);
-        sprite.x = cx;
-        sprite.y = cy;
-        sprite.eventMode = "static";
-        sprite.cursor = "grab";
-        const idx = i;
-        sprite.on("pointerdown", (e) => this.beginDrag(idx, e));
-        this.itemsLayer.addChild(sprite);
-        this.spriteAt[i] = sprite;
+        this.placeItemSprite(item, itemSize, i, { cx, cy });
+      }
+    }
+
+    // --- Inventory row ---
+    if (this.inventorySize > 0) {
+      for (let i = 0; i < this.inventorySize; i++) {
+        const slotIdx = this.boardCellCount + i;
+        const cx = this._inventoryOffsetX + i * cellSize + cellSize / 2;
+        const cy = this._inventoryY + cellSize / 2;
+        this.slots[slotIdx] = { cx, cy };
+
+        const cell = new Graphics();
+        cell
+          .roundRect(
+            cx - innerSize / 2,
+            cy - innerSize / 2,
+            innerSize,
+            innerSize,
+            corner
+          )
+          .fill({ color: INVENTORY_BG, alpha: 0.85 })
+          .stroke({ color: CELL_BORDER, width: 1, alpha: 0.5 });
+        this.cellsLayer.addChild(cell);
+        this.cellGraphics[slotIdx] = cell;
+
+        const item = inventoryItems[i];
+        if (item) {
+          this.placeItemSprite(item, itemSize, slotIdx, { cx, cy });
+        }
       }
     }
   }
 
-  // ---- drag flow ----
+  private placeItemSprite(
+    item: BoardItem,
+    size: number,
+    slotIdx: number,
+    pos: SlotPos
+  ): void {
+    const sprite = createItemSprite(item, size);
+    sprite.x = pos.cx;
+    sprite.y = pos.cy;
+    sprite.eventMode = "static";
+    sprite.cursor = isGenerator(item) ? "pointer" : "grab";
+    sprite.on("pointerdown", (e) => this.beginInteraction(slotIdx, e));
+    this.itemsLayer.addChild(sprite);
+    this.spriteAt[slotIdx] = sprite;
+    this.isGeneratorAt[slotIdx] = isGenerator(item);
+  }
 
-  private beginDrag(idx: number, e: FederatedPointerEvent): void {
+  // ---- pointer flow: tap vs drag ----
+
+  private beginInteraction(idx: number, e: FederatedPointerEvent): void {
     if (this.dragging) return;
     const sprite = this.spriteAt[idx];
     if (!sprite) return;
-
-    // Move sprite to drag layer so it renders above
-    this.itemsLayer.removeChild(sprite);
-    this.dragLayer.addChild(sprite);
-
     const origin = this.slots[idx];
     const local = this.root.toLocal(e.global);
-    const pointerOffset = {
-      dx: sprite.x - local.x,
-      dy: sprite.y - local.y,
-    };
 
     this.dragging = {
       fromIdx: idx,
       sprite,
       origin,
-      pointerOffset,
+      pointerOffset: { dx: sprite.x - local.x, dy: sprite.y - local.y },
       hoverIdx: idx,
+      startX: local.x,
+      startY: local.y,
+      startTimeMs: performance.now(),
+      movedPastThreshold: false,
     };
-
-    sprite.cursor = "grabbing";
-    sprite.zIndex = 999;
-
-    squashPulse(sprite, PICKUP_SCALE, PICKUP_DURATION);
   }
 
   private handlePointerMove = (e: FederatedPointerEvent): void => {
     if (!this.dragging) return;
-    const { sprite, pointerOffset } = this.dragging;
     const local = this.root.toLocal(e.global);
+    const dx = local.x - this.dragging.startX;
+    const dy = local.y - this.dragging.startY;
+    const movedFar = Math.hypot(dx, dy) > TAP_THRESHOLD_PX;
+
+    // Promote to drag once movement passes threshold OR enough time elapsed
+    if (!this.dragging.movedPastThreshold && movedFar) {
+      this.dragging.movedPastThreshold = true;
+      this.promoteToDrag();
+    }
+    if (!this.dragging.movedPastThreshold) return;
+
+    const { sprite, pointerOffset } = this.dragging;
     sprite.x = local.x + pointerOffset.dx;
     sprite.y = local.y + pointerOffset.dy;
 
-    const newHover = this.cellIndexAt(local.x, local.y);
+    const newHover = this.slotIndexAt(local.x, local.y);
     if (newHover !== this.dragging.hoverIdx) {
-      // Un-highlight previous
       this.updateCellHighlight(this.dragging.hoverIdx, false);
       this.dragging.hoverIdx = newHover;
-      // Highlight new (if valid + not the origin slot)
       if (newHover >= 0 && newHover !== this.dragging.fromIdx) {
         this.updateCellHighlight(newHover, true);
       }
     }
   };
 
+  private promoteToDrag(): void {
+    if (!this.dragging) return;
+    // Generators can't be dragged — taps on them resolve immediately on
+    // pointerUp via the tap branch, and short drags on them are no-ops.
+    if (this.isGeneratorAt[this.dragging.fromIdx]) return;
+    const { sprite } = this.dragging;
+    this.itemsLayer.removeChild(sprite);
+    this.dragLayer.addChild(sprite);
+    sprite.cursor = "grabbing";
+    sprite.zIndex = 999;
+    squashPulse(sprite, PICKUP_SCALE, PICKUP_DURATION);
+  }
+
   private handlePointerUp = (): void => {
     if (!this.dragging) return;
-    const { fromIdx, hoverIdx } = this.dragging;
+    const { fromIdx, hoverIdx, movedPastThreshold, startTimeMs } = this.dragging;
+    const dragInfo = this.dragging;
+    const elapsed = performance.now() - startTimeMs;
+    const isTap = !movedPastThreshold && elapsed < TAP_THRESHOLD_MS;
 
-    // Clear any active hover highlight
     if (hoverIdx >= 0) this.updateCellHighlight(hoverIdx, false);
 
-    if (hoverIdx < 0 || hoverIdx === fromIdx) {
-      this.bounceBack();
+    // TAP path
+    if (isTap) {
+      this.dragging = null;
+      if (this.isGeneratorAt[fromIdx] && fromIdx < this.boardCellCount) {
+        this.onGeneratorTap(fromIdx);
+      }
       return;
     }
 
-    const accepted = this.onDrop(fromIdx, hoverIdx);
-    if (!accepted) {
-      this.bounceBack();
+    // DRAG path
+    if (!movedPastThreshold) {
+      // Held in place too long — just release without action
+      this.dragging = null;
+      return;
     }
-    // If accepted, the caller will trigger a state update which calls
-    // rebuild() — that wipes the in-flight sprite naturally.
+    if (hoverIdx < 0 || hoverIdx === fromIdx) {
+      this.bounceBack(dragInfo);
+      return;
+    }
+    const accepted = this.onDrop(fromIdx, hoverIdx);
     this.dragging = null;
+    if (!accepted) {
+      this.bounceBack(dragInfo);
+    }
   };
 
-  /** Animate the dragged sprite back to its origin slot, then re-attach to itemsLayer. */
-  private bounceBack(): void {
-    if (!this.dragging) return;
-    const { sprite, origin, fromIdx } = this.dragging;
-    this.dragging = null;
+  private bounceBack(d: NonNullable<typeof this.dragging>): void {
+    const { sprite, origin, fromIdx } = d;
     tweenTo(sprite, origin.cx, origin.cy, DROP_BACK_DURATION, ease.outBack, () => {
       if (sprite.destroyed) return;
       sprite.cursor = "grab";
       sprite.zIndex = 0;
-      this.dragLayer.removeChild(sprite);
-      this.itemsLayer.addChild(sprite);
+      if (sprite.parent === this.dragLayer) {
+        this.dragLayer.removeChild(sprite);
+        this.itemsLayer.addChild(sprite);
+      }
       this.spriteAt[fromIdx] = sprite;
     });
   }
 
-  /** Hard cancel — used on rebuild while drag in flight */
   private cancelDrag(animate: boolean): void {
     if (!this.dragging) return;
     if (animate) {
-      this.bounceBack();
+      const d = this.dragging;
+      this.dragging = null;
+      this.bounceBack(d);
     } else {
       this.dragging = null;
     }
@@ -296,30 +408,61 @@ export class BoardScene {
 
   private updateCellHighlight(idx: number, on: boolean): void {
     if (idx < 0 || idx >= this.cellGraphics.length) return;
+    // Inventory cells use a different default style; respect that
     const cellSize = this.cellSize;
     const gap = cellSize * CELL_GAP_RATIO;
     const corner = cellSize * CORNER_RADIUS_RATIO;
     const innerSize = cellSize - gap;
     const { cx, cy } = this.slots[idx];
-    this.drawCellGraphic(this.cellGraphics[idx], cx, cy, innerSize, corner, on);
+    if (idx < this.boardCellCount) {
+      this.drawCellGraphic(this.cellGraphics[idx], cx, cy, innerSize, corner, on);
+    } else {
+      // Inventory highlight = slightly stronger fill
+      const g = this.cellGraphics[idx];
+      g.clear();
+      g.roundRect(
+        cx - innerSize / 2,
+        cy - innerSize / 2,
+        innerSize,
+        innerSize,
+        corner
+      )
+        .fill({ color: on ? CELL_BG_HOVER : INVENTORY_BG, alpha: 0.85 })
+        .stroke({
+          color: on ? 0x8a7ad9 : CELL_BORDER,
+          width: on ? 2 : 1,
+          alpha: on ? 0.9 : 0.5,
+        });
+    }
   }
 
-  /** Local-space hit test. Returns -1 if outside any cell. */
-  private cellIndexAt(x: number, y: number): number {
+  /** Local-space hit test across both board and inventory rows. */
+  private slotIndexAt(x: number, y: number): number {
     if (this.cellSize === 0) return -1;
-    const col = Math.floor(x / this.cellSize);
-    const row = Math.floor(y / this.cellSize);
-    if (col < 0 || col >= this.boardCols) return -1;
-    if (row < 0 || row >= this.boardCols) return -1;
-    return row * this.boardCols + col;
+    // Board area
+    if (y >= 0 && y < this._boardHeight) {
+      const col = Math.floor(x / this.cellSize);
+      const row = Math.floor(y / this.cellSize);
+      if (col < 0 || col >= this.boardCols) return -1;
+      if (row < 0 || row >= this.boardCols) return -1;
+      return row * this.boardCols + col;
+    }
+    // Inventory row
+    if (this.inventorySize > 0) {
+      const invTop = this._inventoryY - this.cellSize / 2;
+      const invBot = this._inventoryY + this.cellSize / 2;
+      if (y >= invTop && y <= invBot) {
+        const localX = x - this._inventoryOffsetX;
+        const i = Math.floor(localX / this.cellSize);
+        if (i >= 0 && i < this.inventorySize) {
+          return this.boardCellCount + i;
+        }
+      }
+    }
+    return -1;
   }
 
-  /**
-   * Play a merge animation on (fromIdx → toIdx) before the next rebuild().
-   * Caller awaits this if they want the rebuild to come after the punch.
-   * In 1.C we keep it simple: fade source out + pulse target. 1.D adds
-   * particle sparkle.
-   */
+  /** Punch animation on merge (source fades, target pulses). */
   async playMergeAnim(fromIdx: number, toIdx: number): Promise<void> {
     const source = this.spriteAt[fromIdx];
     const target = this.spriteAt[toIdx];
@@ -340,10 +483,16 @@ export class BoardScene {
       } else {
         finish();
       }
-      // Safety net — never block rebuild for more than 500ms even if a sprite
-      // got destroyed mid-animation.
       setTimeout(resolve, 500);
     });
+  }
+
+  /** Brief celebration on a newly-spawned item. */
+  playSpawnAnim(idx: number): void {
+    const sprite = this.spriteAt[idx];
+    if (!sprite) return;
+    sprite.scale.set(0);
+    squashPulse(sprite, 1.0, 240);
   }
 
   destroy(): void {

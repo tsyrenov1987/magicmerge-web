@@ -4,15 +4,16 @@
   import { gameState, resetGame } from "$lib/store/game";
   import { getPixiApp, destroyPixiApp } from "$lib/pixi/app";
   import { BoardScene } from "$lib/pixi/boardScene";
-  import { applyDrop } from "$lib/game/actions";
+  import { applyDrop, applyGeneratorTap, applyEnergyTick } from "$lib/game/actions";
   import { tt, locale } from "$lib/i18n";
-  import { haptic, hapticNotify } from "$lib/telegram";
+  import { haptic, hapticNotify, tg } from "$lib/telegram";
   import { setView } from "$lib/store/ui";
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
   let mounted = false;
   let resizeObserver: ResizeObserver | undefined;
+  let energyTickInterval: ReturnType<typeof setInterval> | undefined;
 
   const labelLevel = $derived(tt($locale, "Уровень", "Level", "Nivel"));
   const labelCoins = $derived(tt($locale, "Монеты", "Coins", "Monedas"));
@@ -27,19 +28,48 @@
       "¿Borrar progreso y empezar de nuevo?"
     )
   );
+  const msgNoEnergy = $derived(
+    tt(
+      $locale,
+      "Нет энергии! Подожди немного.",
+      "Out of energy! Wait a bit.",
+      "¡Sin energía! Espera un poco."
+    )
+  );
+  const msgNoSpace = $derived(
+    tt(
+      $locale,
+      "Нет места на доске.",
+      "No space on the board.",
+      "No hay espacio en el tablero."
+    )
+  );
+  const msgLucky = $derived(
+    tt(
+      $locale,
+      "✨ Сундук удачи!",
+      "✨ Lucky chest!",
+      "✨ ¡Cofre de la suerte!"
+    )
+  );
 
-  /** Called by BoardScene when a drag ends on a valid target.
-   *  Returns true to mean "I handled it, please rebuild from new state". */
+  function flash(message: string) {
+    const t = tg();
+    if (t) {
+      t.showAlert?.(message);
+    } else {
+      // Browser dev fallback
+      console.info("[flash]", message);
+    }
+  }
+
+  /** Drag/drop landed on a valid target. */
   function handleDrop(fromIdx: number, toIdx: number): boolean {
     const current = get(gameState);
     const { next, outcome } = applyDrop(current, fromIdx, toIdx);
-    if (outcome.kind === "noop") {
-      return false;
-    }
+    if (outcome.kind === "noop") return false;
 
     if (outcome.kind === "merge") {
-      // Punch animation BEFORE the store update so the old sprites are still
-      // mounted. Then we apply the state and rebuild.
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
         gameState.set(next);
         hapticNotify("success");
@@ -57,6 +87,37 @@
     return false;
   }
 
+  /** Tap on a generator → spawn a new item. */
+  function handleGeneratorTap(boardIdx: number): boolean {
+    const current = get(gameState);
+    const { next, outcome } = applyGeneratorTap(current, boardIdx);
+
+    if (outcome.kind === "no-energy") {
+      hapticNotify("error");
+      flash(msgNoEnergy);
+      return false;
+    }
+    if (outcome.kind === "no-space") {
+      hapticNotify("warning");
+      flash(msgNoSpace);
+      return false;
+    }
+    if (outcome.kind === "not-generator") {
+      return false;
+    }
+
+    // Spawned successfully.
+    gameState.set(next);
+    haptic(outcome.isLucky ? "heavy" : "medium");
+    if (outcome.isLucky) {
+      hapticNotify("success");
+      flash(msgLucky);
+    }
+    // Pop animation runs after the next rebuild() landed by the store subscription.
+    queueMicrotask(() => scene?.playSpawnAnim(outcome.idx));
+    return true;
+  }
+
   async function setupPixi() {
     if (!mountTarget) return;
     const app = await getPixiApp(mountTarget);
@@ -71,20 +132,38 @@
       height,
       margin: 12,
       onDrop: handleDrop,
+      onGeneratorTap: handleGeneratorTap,
     });
 
     const unsubscribe = gameState.subscribe((s) => {
-      scene?.rebuild(s.boardCols, s.board);
+      scene?.resize(
+        mountTarget.clientWidth,
+        mountTarget.clientHeight,
+        s.boardCols,
+        s.inventory.length
+      );
+      scene?.rebuild(s.boardCols, s.board, s.inventory);
     });
 
     resizeObserver = new ResizeObserver(() => {
       const w = mountTarget.clientWidth;
       const h = mountTarget.clientHeight;
-      scene?.resize(w, h);
       const current = get(gameState);
-      scene?.rebuild(current.boardCols, current.board);
+      scene?.resize(w, h, current.boardCols, current.inventory.length);
+      scene?.rebuild(current.boardCols, current.board, current.inventory);
     });
     resizeObserver.observe(mountTarget);
+
+    // Passive energy regen — tick every 2 seconds. Action is idempotent
+    // (only mutates when ENERGY_REGEN_MS has elapsed) so 2s polling is
+    // smooth enough for the player AND cheap on battery.
+    energyTickInterval = setInterval(() => {
+      const current = get(gameState);
+      const next = applyEnergyTick(current);
+      if (next !== current) {
+        gameState.set(next);
+      }
+    }, 2000);
 
     mounted = true;
     return unsubscribe;
@@ -97,6 +176,7 @@
   });
 
   onDestroy(async () => {
+    if (energyTickInterval) clearInterval(energyTickInterval);
     resizeObserver?.disconnect();
     const unsubscribe = await unsubscribePromise;
     unsubscribe?.();
@@ -154,7 +234,7 @@
     height: 100dvh;
     background: linear-gradient(180deg, #1A1424 0%, #2B1B3D 100%);
     color: #fff;
-    touch-action: none; /* prevent scroll-pan on drag */
+    touch-action: none;
     user-select: none;
   }
   header {
