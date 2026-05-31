@@ -1,0 +1,28 @@
+{
+  "name": "magicmerge-web",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Magic Merge — Telegram Mini App port (HTML5/TS/Svelte/PixiJS)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "type": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@twa-dev/sdk": "^7.10.1",
+    "firebase": "^11.0.0",
+    "pixi.js": "^8.6.6",
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte-check": "^4.1.0",
+    "tslib": "^2.8.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  }
+}
