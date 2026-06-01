@@ -301,12 +301,14 @@
     });
 
     // Lily lives in her own top-level container so she always renders above
-    // the board and stays put when the board rebuilds.
+    // the board and stays put when the board rebuilds. Sized small so she
+    // reads as a UI companion in the corner rather than blocking the play
+    // surface.
     lily = new Lily({
       parent: app.stage,
-      x: width - 56,
-      y: height - 56,
-      size: 64,
+      x: width - 42,
+      y: height - 42,
+      size: 44,
     });
 
     const unsubscribe = gameState.subscribe((s) => {
@@ -325,7 +327,7 @@
       const current = get(gameState);
       scene?.resize(w, h, current.boardCols, current.inventory.length);
       scene?.rebuild(current.boardCols, current.board, current.inventory);
-      lily?.moveTo(w - 56, h - 56);
+      lily?.moveTo(w - 42, h - 42);
     });
     resizeObserver.observe(mountTarget);
 
@@ -427,7 +429,8 @@
         if (targetPos) {
           if (!lilyAwayFromHome) {
             lily.setMood("attention");
-            lily.flyTo(targetPos.x, targetPos.y);
+            const safe = lilySafePoint(targetPos.x, targetPos.y);
+            lily.flyToPoint(safe.x, safe.y);
             lilyAwayFromHome = true;
             if (lastMood !== "attention") {
               say("hint");
@@ -438,6 +441,38 @@
         }
       }
     }
+  }
+
+  /**
+   * Compute a landing point for Lily that stays OUTSIDE the board grid.
+   * Strategy: project the target's X onto a band below the board (or to
+   * the side if the screen is wide enough), so Lily can "point" at the
+   * merge slot without ever occluding play tiles.
+   */
+  function lilySafePoint(targetX: number, targetY: number): { x: number; y: number } {
+    if (!scene || !mountTarget) return { x: targetX, y: targetY };
+    const bounds = scene.boardWorldBounds();
+    const screenW = mountTarget.clientWidth;
+    const screenH = mountTarget.clientHeight;
+    const SAFE_MARGIN = 28;
+    const LILY_HALF = 22; // half of size=44
+
+    // Default: hover under the board, aligned with target column.
+    let x = targetX;
+    let y = bounds.y + bounds.height + SAFE_MARGIN;
+
+    // If below-board would push Lily off-screen (very short screen), put
+    // her ABOVE the board instead.
+    if (y + LILY_HALF > screenH - 8) {
+      y = Math.max(LILY_HALF + 8, bounds.y - SAFE_MARGIN);
+    }
+
+    // Clamp X so Lily's body doesn't clip the canvas edges.
+    x = Math.max(LILY_HALF + 6, Math.min(screenW - LILY_HALF - 6, x));
+    // Reference targetY to avoid unused-arg lint; used implicitly when
+    // future variants might choose a side-band instead of the bottom band.
+    void targetY;
+    return { x, y };
   }
 
   onDestroy(async () => {

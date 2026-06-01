@@ -273,26 +273,56 @@ export class Lily {
     );
   }
 
+  /**
+   * Fly to a literal world position — no HOVER_OFFSET_Y compensation.
+   * Use this when the caller has already computed a safe landing point
+   * (e.g. one that stays outside the board area).
+   */
+  flyToPoint(x: number, y: number, onArrive?: () => void): void {
+    this.setCurrentAnchor(x, y);
+    this.cancelFly?.();
+    this.cancelFly = tweenTo(
+      this.root,
+      x,
+      y,
+      FLY_DURATION,
+      ease.outCubic,
+      () => {
+        this.cancelFly = null;
+        onArrive?.();
+      }
+    );
+  }
+
   flyHome(onArrive?: () => void): void {
     this.flyTo(this.homeX, this.homeY - HOVER_OFFSET_Y, onArrive);
     this.setCurrentAnchor(this.homeX, this.homeY);
   }
 
-  celebrate(x: number, y: number): void {
-    this.spawnSparkles(x, y, 12);
+  /**
+   * Celebrate in place — small joyful jump at home, mood pulse, back down.
+   * Lily does NOT traverse to the merge spot; the merge sparkle burst and
+   * tier ring already happen there via the board effects layer, so flying
+   * across the board would just obscure them and feel busy.
+   */
+  celebrate(_x?: number, _y?: number): void {
     this.setMood("celebrate");
     this.cancelFly?.();
-    this.setCurrentAnchor(x, y - 30);
-    this.cancelFly = tweenTo(this.root, x, y - 30, 220, ease.outBack, () => {
+    const homeX = this.homeX;
+    const homeY = this.homeY;
+    const jumpY = homeY - Math.max(14, this.size * 0.32);
+    this.setCurrentAnchor(homeX, jumpY);
+    this.cancelFly = tweenTo(this.root, homeX, jumpY, 180, ease.outCubic, () => {
+      if (this.destroyedFlag) return;
       this.cancelFly = tweenTo(
         this.root,
-        this.homeX,
-        this.homeY,
-        CELEBRATE_DURATION,
-        ease.inOutCubic,
+        homeX,
+        homeY,
+        CELEBRATE_DURATION - 180,
+        ease.outBack,
         () => {
           this.cancelFly = null;
-          this.setCurrentAnchor(this.homeX, this.homeY);
+          this.setCurrentAnchor(homeX, homeY);
           this.setMood("idle");
         }
       );

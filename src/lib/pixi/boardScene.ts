@@ -183,11 +183,13 @@ export class BoardScene {
     this.root.y = (height - totalHeight) / 2;
 
     // Store useful layout for slot lookups
+    this._boardWidth = boardWidth;
     this._boardHeight = boardHeight;
     this._inventoryY = boardHeight + 16;
     this._inventoryOffsetX = (boardWidth - inventoryWidth) / 2;
   }
 
+  private _boardWidth = 0;
   private _boardHeight = 0;
   private _inventoryY = 0;
   private _inventoryOffsetX = 0;
@@ -546,6 +548,21 @@ export class BoardScene {
     return {
       x: this.root.x + slot.cx,
       y: this.root.y + slot.cy,
+    };
+  }
+
+  /**
+   * Bounding rectangle of the board grid in world (stage) coords.
+   * Inventory row is not included (Lily can freely hover beside it).
+   * Used by GameCanvas to keep Lily OUTSIDE the play area on attention /
+   * celebrate moves.
+   */
+  boardWorldBounds(): { x: number; y: number; width: number; height: number } {
+    return {
+      x: this.root.x,
+      y: this.root.y,
+      width: this._boardWidth,
+      height: this._boardHeight,
     };
   }
 
