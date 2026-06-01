@@ -15,7 +15,8 @@
   import { trigger as triggerStory, clearSeenEpisodes } from "$lib/lily/story";
   import { gardenState, resetGarden, creditArtifact } from "$lib/store/garden";
   import { computeGardenBonuses } from "$lib/garden/bonuses";
-  import { resetSpin } from "$lib/store/spin";
+  import { resetSpin, spinState, isSpinReady } from "$lib/store/spin";
+  import { setView } from "$lib/store/ui";
   import { claimDailyStreak, resetStreak } from "$lib/store/streak";
   import { preload } from "$lib/assets/loader";
   import { ESSENTIAL_GAME, itemSpriteUrl, generatorSpriteUrl } from "$lib/assets/manifest";
@@ -24,7 +25,6 @@
   import LilyBubble from "$components/LilyBubble.svelte";
   import TabBar from "$components/TabBar.svelte";
   import PrestigeModal from "$components/PrestigeModal.svelte";
-  import ShopModal from "$components/ShopModal.svelte";
   import StoryLogView from "$components/StoryLogView.svelte";
   import LeaderboardModal from "$components/LeaderboardModal.svelte";
   import ShareToast from "$components/ShareToast.svelte";
@@ -82,10 +82,12 @@
   const combo = $derived($gameState.comboCount ?? 0);
 
   let prestigeOpen = $state(false);
-  let shopOpen = $state(false);
   let storyLogOpen = $state(false);
   let leaderboardOpen = $state(false);
-  const labelShop = $derived(tt($locale, "Магазин", "Shop", "Tienda"));
+
+  // Spin readiness — drives the pulse badge on the header spin button.
+  const spinReady = $derived(isSpinReady($spinState));
+  const labelSpin = $derived(tt($locale, "Колесо", "Spin", "Ruleta"));
   const labelStoryLog = $derived(tt($locale, "Дневник", "Story Log", "Diario"));
   const labelLeaderboard = $derived(tt($locale, "Таблица лидеров", "Leaderboard", "Tabla"));
   const seenCount = $derived($seenEpisodes.size);
@@ -565,12 +567,13 @@
     {/if}
     <button
       type="button"
-      class="stat shop-btn"
-      title={labelShop}
-      aria-label={labelShop}
-      onclick={() => (shopOpen = true)}
+      class="stat spin-btn"
+      class:ready={spinReady}
+      title={labelSpin}
+      aria-label={labelSpin}
+      onclick={() => setView("spin")}
     >
-      <span class="stat-label" aria-hidden="true">🛒</span>
+      <span class="stat-label" aria-hidden="true">🎡</span>
     </button>
     {#if seenCount > 0}
       <button
@@ -597,7 +600,6 @@
   </header>
 
   <PrestigeModal bind:open={prestigeOpen} />
-  <ShopModal bind:open={shopOpen} />
   <StoryLogView bind:open={storyLogOpen} />
   <LeaderboardModal bind:open={leaderboardOpen} />
   <ShareToast bind:open={shareToastOpen} tier={shareToastTier} line={shareToastLine} />
@@ -667,19 +669,29 @@
     color: #d8a8f5;
     font-variant-numeric: tabular-nums;
   }
-  .shop-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+  .spin-btn {
+    background: rgba(255, 217, 90, 0.1);
+    border: 1px solid rgba(255, 217, 90, 0.2);
     border-radius: 10px;
     padding: 4px 10px;
     color: #fff;
     cursor: pointer;
   }
-  .shop-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
+  .spin-btn:hover {
+    background: rgba(255, 217, 90, 0.18);
   }
-  .shop-btn .stat-label {
+  .spin-btn .stat-label {
     font-size: 18px;
+  }
+  /* Pulse badge when the daily spin is ready */
+  .spin-btn.ready {
+    animation: spin-pulse 1.4s ease-in-out infinite;
+    background: rgba(255, 217, 90, 0.22);
+    border-color: rgba(255, 217, 90, 0.6);
+  }
+  @keyframes spin-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 217, 90, 0.4); }
+    50%      { box-shadow: 0 0 14px 2px rgba(255, 217, 90, 0.7); }
   }
   .log-btn {
     background: rgba(232, 164, 242, 0.1);

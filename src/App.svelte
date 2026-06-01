@@ -7,9 +7,10 @@
   import StoryPanel from "$components/StoryPanel.svelte";
   import { initFirebase } from "$lib/firebase";
   import { tgUser, isInTelegram, bindBackButton } from "$lib/telegram";
-  import { uiView, setView } from "$lib/store/ui";
+  import { uiView, setView, shopOpen } from "$lib/store/ui";
   import { initReferral, teardownReferral } from "$lib/store/referral";
   import { initTasks, teardownTasks } from "$lib/store/tasks";
+  import ShopModal from "$components/ShopModal.svelte";
 
   initFirebase();
 
@@ -54,6 +55,9 @@
 
 <!-- Story episodes float above any view; safe to mount at root. -->
 <StoryPanel />
+
+<!-- Shop modal lives at root so the TabBar can open it from any view. -->
+<ShopModal bind:open={$shopOpen} />
 
 <style>
   main {

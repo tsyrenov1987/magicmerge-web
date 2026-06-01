@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { uiView, setView } from "$lib/store/ui";
-  import { spinState, isSpinReady } from "$lib/store/spin";
+  import { uiView, setView, openShop } from "$lib/store/ui";
   import { locale, tt } from "$lib/i18n";
   import { haptic } from "$lib/telegram";
 
   const labelGame = $derived(tt($locale, "Доска", "Board", "Tablero"));
   const labelGarden = $derived(tt($locale, "Сад", "Garden", "Jardín"));
-  const labelSpin = $derived(tt($locale, "Колесо", "Spin", "Ruleta"));
+  const labelShop = $derived(tt($locale, "Магазин", "Shop", "Tienda"));
   const labelBack = $derived(tt($locale, "Назад", "Back", "Atrás"));
 
-  const spinReady = $derived(isSpinReady($spinState));
-
-  function go(view: "game" | "garden" | "spin" | "landing") {
+  function go(view: "game" | "garden" | "landing") {
     if ($uiView === view) return;
     haptic("light");
     setView(view);
+  }
+
+  function onShop() {
+    haptic("light");
+    openShop();
   }
 </script>
 
@@ -47,13 +49,12 @@
   </button>
   <button
     type="button"
-    class="tab spin-tab"
-    class:active={$uiView === "spin"}
-    class:badge={spinReady}
-    onclick={() => go("spin")}
+    class="tab"
+    onclick={onShop}
+    aria-label={labelShop}
   >
-    <span class="emoji" aria-hidden="true">🎡</span>
-    <span class="label">{labelSpin}</span>
+    <span class="emoji" aria-hidden="true">🛒</span>
+    <span class="label">{labelShop}</span>
   </button>
 </nav>
 
@@ -111,25 +112,5 @@
   }
   .tab.active .label {
     color: #E8A4F2;
-  }
-  /* Pulse badge when the daily spin is ready */
-  .spin-tab.badge::after {
-    content: "";
-    position: absolute;
-    top: 4px;
-    right: calc(50% - 18px);
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ffd96b;
-    box-shadow: 0 0 8px rgba(255, 217, 90, 0.85);
-    animation: badge-pulse 1.4s ease-in-out infinite;
-  }
-  .spin-tab {
-    position: relative;
-  }
-  @keyframes badge-pulse {
-    0%, 100% { opacity: 0.7; transform: scale(1); }
-    50%      { opacity: 1;   transform: scale(1.15); }
   }
 </style>

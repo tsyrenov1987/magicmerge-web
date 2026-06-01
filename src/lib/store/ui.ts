@@ -54,3 +54,14 @@ uiView.subscribe((value) => {
 export function setView(next: UiView): void {
   uiView.set(next);
 }
+
+/**
+ * Shop modal open state — lifted to a global store so the bottom TabBar
+ * can pop it without coupling to whichever view is currently rendered.
+ * The modal itself is mounted once in App.svelte.
+ */
+export const shopOpen = writable(false);
+
+export function openShop(): void {
+  shopOpen.set(true);
+}
