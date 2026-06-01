@@ -292,11 +292,14 @@ function freeSlotNear(boardIdx: number, state: GameUiState): number {
  */
 export function applyEnergyTick(state: GameUiState, now: number = Date.now()): GameUiState {
   if (state.energy >= state.energyMax) return state;
+  // Stardust upgrade: each tier shortens the regen interval by 10%
+  const regenTier = state.upgrades?.regenSpeedBoost ?? 0;
+  const effectiveInterval = ENERGY_REGEN_MS * Math.pow(0.9, regenTier);
   const elapsed = now - state.lastEnergyTimeMs;
-  if (elapsed < ENERGY_REGEN_MS) return state;
-  const ticks = Math.floor(elapsed / ENERGY_REGEN_MS);
+  if (elapsed < effectiveInterval) return state;
+  const ticks = Math.floor(elapsed / effectiveInterval);
   const newEnergy = Math.min(state.energyMax, state.energy + ticks);
-  const newLastEnergyTimeMs = state.lastEnergyTimeMs + ticks * ENERGY_REGEN_MS;
+  const newLastEnergyTimeMs = state.lastEnergyTimeMs + ticks * effectiveInterval;
   return {
     ...state,
     energy: newEnergy,

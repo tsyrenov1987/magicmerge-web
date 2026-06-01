@@ -39,8 +39,15 @@ export interface GameUiState {
   masteredLines?: LineId[];
   /** Highest item tier reached this prestige cycle. Resets on prestige. */
   highestTierThisRun?: number;
-  /** Stardust accumulated across all prestige resets. Spent on permanent upgrades (Phase 3.E). */
+  /** Stardust accumulated across all prestige resets. Spent on permanent upgrades. */
   stardust?: number;
+  /** Stackable stardust upgrades — count = number of times purchased. */
+  upgrades?: {
+    /** Each tier: +20 to energyMax (capped at 5 = +100 total) */
+    energyMaxBoost?: number;
+    /** Each tier: −10% to ENERGY_REGEN_MS effective (capped at 4 = ~40% faster) */
+    regenSpeedBoost?: number;
+  };
 }
 
 const STORAGE_KEY = "magicmerge.game";
@@ -171,6 +178,81 @@ export function applyPrestige(state: GameUiState): GameUiState {
     highestTierThisRun: 1,
     // boosters, coins, masteredLines, energyMax — all preserved
   };
+}
+
+// ---- Shop actions ----
+
+export type PurchaseOutcome =
+  | { kind: "ok" }
+  | { kind: "not-enough-coins" }
+  | { kind: "not-enough-stardust" }
+  | { kind: "max-tier" }
+  | { kind: "unknown-item" };
+
+/**
+ * Apply a shop purchase. Pure — returns new state + outcome. Caller
+ * resolves UI feedback (haptic / toast / etc.) from the outcome.
+ */
+export function applyPurchase(
+  state: GameUiState,
+  item: {
+    id: string;
+    coinCost?: number;
+    stardustCost?: number;
+    award?: { booster: keyof NonNullable<GameUiState["boosters"]>; amount: number };
+    energyAmount?: number;
+    maxTier?: number;
+  }
+): { next: GameUiState; outcome: PurchaseOutcome } {
+  // Coin-priced
+  if (item.coinCost !== undefined) {
+    if (state.coins < item.coinCost) {
+      return { next: state, outcome: { kind: "not-enough-coins" } };
+    }
+    let next = { ...state, coins: state.coins - item.coinCost };
+    if (item.award) {
+      const boosters = { ...(next.boosters ?? {}) };
+      const cur = boosters[item.award.booster] ?? 0;
+      boosters[item.award.booster] = cur + item.award.amount;
+      next = { ...next, boosters };
+    }
+    if (item.energyAmount) {
+      next = { ...next, energy: next.energy + item.energyAmount };
+    }
+    return { next, outcome: { kind: "ok" } };
+  }
+
+  // Stardust upgrade
+  if (item.stardustCost !== undefined) {
+    const upgrades = { ...(state.upgrades ?? {}) };
+    const upgradeKey =
+      item.id === "upgrade_energy_max" ? "energyMaxBoost" :
+      item.id === "upgrade_regen_speed" ? "regenSpeedBoost" :
+      undefined;
+    if (!upgradeKey) {
+      return { next: state, outcome: { kind: "unknown-item" } };
+    }
+    const tier = upgrades[upgradeKey] ?? 0;
+    if (item.maxTier !== undefined && tier >= item.maxTier) {
+      return { next: state, outcome: { kind: "max-tier" } };
+    }
+    if ((state.stardust ?? 0) < item.stardustCost) {
+      return { next: state, outcome: { kind: "not-enough-stardust" } };
+    }
+    upgrades[upgradeKey] = tier + 1;
+    let next: GameUiState = {
+      ...state,
+      stardust: (state.stardust ?? 0) - item.stardustCost,
+      upgrades,
+    };
+    // Energy-max upgrade also bumps the cap immediately
+    if (upgradeKey === "energyMaxBoost") {
+      next = { ...next, energyMax: next.energyMax + 20 };
+    }
+    return { next, outcome: { kind: "ok" } };
+  }
+
+  return { next: state, outcome: { kind: "unknown-item" } };
 }
 
 export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {

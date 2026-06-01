@@ -21,6 +21,7 @@
   import LilyBubble from "$components/LilyBubble.svelte";
   import TabBar from "$components/TabBar.svelte";
   import PrestigeModal from "$components/PrestigeModal.svelte";
+  import ShopModal from "$components/ShopModal.svelte";
   import { MAX_LEVEL } from "$lib/game/logic";
 
   let mountTarget: HTMLDivElement;
@@ -62,6 +63,8 @@
   const prestigeReady = $derived(($gameState.highestTierThisRun ?? 1) >= MAX_LEVEL);
 
   let prestigeOpen = $state(false);
+  let shopOpen = $state(false);
+  const labelShop = $derived(tt($locale, "Магазин", "Shop", "Tienda"));
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
   const confirmReset = $derived(
     tt(
@@ -402,9 +405,18 @@
         <span class="stat-value">{stardust}</span>
       </button>
     {/if}
+    <button
+      type="button"
+      class="stat shop-btn"
+      title={labelShop}
+      onclick={() => (shopOpen = true)}
+    >
+      <span class="stat-label">🛒</span>
+    </button>
   </header>
 
   <PrestigeModal bind:open={prestigeOpen} />
+  <ShopModal bind:open={shopOpen} />
 
   <div bind:this={mountTarget} class="canvas-host">
     <LilyBubble />
@@ -459,6 +471,20 @@
   .prestige .stat-value {
     color: #d8a8f5;
     font-variant-numeric: tabular-nums;
+  }
+  .shop-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .shop-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .shop-btn .stat-label {
+    font-size: 18px;
   }
   .prestige.ready {
     animation: prestige-pulse 1.6s ease-in-out infinite;
