@@ -18,7 +18,9 @@ import {
   COMBO_WINDOW_MS,
   artifactFor,
   comboMultiplier,
+  findChainNeighbor,
 } from "./logic";
+import { NO_BONUSES, type GardenBonuses } from "$lib/garden/bonuses";
 import {
   makeItem,
   makeLuckyChest,
@@ -30,25 +32,38 @@ import { LINE_IDS, lineFromEmoji, type LineId } from "./lines";
 import type { GameUiState } from "$lib/store/game";
 import type { ArtifactId } from "$lib/garden/buildings";
 
+export interface ChainStepInfo {
+  fromIdx: number;
+  toIdx: number;
+  levelAfter: number;
+}
+
 export type DropOutcome =
   | {
       kind: "merge";
       from: number;
       to: number;
+      /** Final tier after any chain cascade (>= newLevelInitial) */
       newLevel: number;
-      /** Base coin value before combo multiplier */
+      /** Tier of the initial merge before chain cascade ran */
+      newLevelInitial: number;
+      /** Base coin value before combo multiplier and garden bonuses */
       baseCoins: number;
-      /** Coin reward including combo multiplier */
+      /** Coin reward including combo multiplier + garden bonuses */
       coins: number;
       line: LineId;
       /** Current combo count after this merge (1 for fresh chain) */
       combo: number;
       /** Multiplier applied (1.0 = no bonus) */
       multiplier: number;
+      /** Chain cascade steps (depth up to 3) — empty for simple merges */
+      chainSteps: ChainStepInfo[];
       /** Artifact dropped by this merge (L5+ items only), if any */
       artifact?: ArtifactId;
       /** True iff THIS merge mastered the line (first L8 in this line) */
       newlyMastered?: boolean;
+      /** True iff this was a Lucky Chest jackpot merge */
+      jackpot?: boolean;
     }
   | { kind: "move"; from: number; to: number }
   | { kind: "swap"; from: number; to: number }
@@ -92,7 +107,8 @@ export function applyDrop(
   state: GameUiState,
   fromIdx: number,
   toIdx: number,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  bonuses: GardenBonuses = NO_BONUSES
 ): { next: GameUiState; outcome: DropOutcome } {
   if (fromIdx === toIdx) {
     return { next: state, outcome: { kind: "noop", reason: "same-cell" } };
@@ -133,7 +149,7 @@ export function applyDrop(
   if (source.isLuckyChest && target.isLuckyChest) {
     const jackpotCoins = 550;
     writeCell(board, inventory, fromIdx, null);
-    writeCell(board, inventory, toIdx, null); // jackpot consumes both, no item left
+    writeCell(board, inventory, toIdx, null);
     const boosters = { ...(state.boosters ?? {}) };
     boosters.hammer = (boosters.hammer ?? 0) + 1;
     return {
@@ -149,50 +165,98 @@ export function applyDrop(
         from: fromIdx,
         to: toIdx,
         newLevel: 1,
+        newLevelInitial: 1,
         baseCoins: jackpotCoins,
         coins: jackpotCoins,
-        line: "roses", // dummy; UI checks the lucky path via custom flag
+        line: "roses",
         combo: 1,
         multiplier: 1,
+        chainSteps: [],
+        jackpot: true,
       },
     };
   }
 
   // Case: same line + level + below cap → merge
   if (canMerge(source, target)) {
-    const newLevel = target.level + 1;
+    const newLevelInitial = target.level + 1;
     const line = lineOf(target);
     if (!line) {
       return { next: state, outcome: { kind: "noop", reason: "invalid" } };
     }
-    const merged = makeItem(line, newLevel);
     writeCell(board, inventory, fromIdx, null);
-    writeCell(board, inventory, toIdx, merged);
+    writeCell(board, inventory, toIdx, makeItem(line, newLevelInitial));
 
+    // --- Chain cascade (port of iOS Variety #5) ---
+    // After the initial merge, look for a 4-directional neighbor of the
+    // same line + level on the board (inventory has no adjacency). On
+    // match, the current cell vacates and the neighbor levels up. Repeat
+    // up to depth 3 or until MAX_LEVEL.
+    const chainSteps: ChainStepInfo[] = [];
+    let currentLevel = newLevelInitial;
+    let lastAt = toIdx;
+    const targetIsBoard = toIdx < state.board.length;
+    if (targetIsBoard) {
+      while (chainSteps.length < 3 && currentLevel < MAX_LEVEL) {
+        const matchIdx = findChainNeighbor(
+          board,
+          state.boardCols,
+          lastAt,
+          source.baseEmoji,
+          currentLevel
+        );
+        if (matchIdx < 0) break;
+        // The board[lastAt] currently holds the merged item; clear it
+        // and bump the neighbor up.
+        board[lastAt] = null;
+        const nextLvl = currentLevel + 1;
+        board[matchIdx] = makeItem(line, nextLvl);
+        chainSteps.push({ fromIdx: lastAt, toIdx: matchIdx, levelAfter: nextLvl });
+        currentLevel = nextLvl;
+        lastAt = matchIdx;
+      }
+    }
+    const newLevel = currentLevel;
+
+    // --- Coin math ---
     const baseCoins = calculateSellPrice(newLevel);
 
-    // Combo tracking — port of iOS GameViewModel combo logic.
-    // Within COMBO_WINDOW_MS of the previous merge → continue chain;
-    // otherwise start a new chain at 1.
+    // Combo tracking
     const now = Date.now();
     const prevCombo = state.comboCount ?? 0;
     const prevMergeMs = state.lastMergeMs ?? 0;
     const combo = (now - prevMergeMs < COMBO_WINDOW_MS && prevCombo > 0)
       ? prevCombo + 1
       : 1;
-    const multiplier = comboMultiplier(combo);
-    const coins = Math.round(baseCoins * multiplier);
+    let multiplier = comboMultiplier(combo);
+    // Fairy House garden bonus: +10% combo reward when combo > 1
+    if (combo > 1) multiplier += bonuses.comboRewardBonus;
 
-    // L5+ merges roll for an artifact (port of iOS maybeDropArtifact).
+    // Garden sell multipliers:
+    //   - Greenhouse: ×2 for L3+ items
+    //   - Fire Tower / Rainbow Bridge: flat coin multiplier on sells
+    let sellMult = bonuses.coinSellMultiplier;
+    if (newLevel >= 3) sellMult *= bonuses.sellMultiplierL3Plus;
+
+    // Chain bonus per step (mirror iOS: nextLvl × 100 × 1.5 per step)
+    const chainBonus = chainSteps.reduce(
+      (sum, step) => sum + Math.round(step.levelAfter * 100 * 1.5),
+      0
+    );
+
+    const coins = Math.round(baseCoins * multiplier * sellMult) + chainBonus;
+
+    // L5+ merges roll for an artifact (Crystal Cave boosts the chance)
     let artifact: ArtifactId | undefined;
-    if (newLevel >= ARTIFACT_MIN_LEVEL && rng() < ARTIFACT_BASE_CHANCE) {
+    const artifactChance = ARTIFACT_BASE_CHANCE * bonuses.artifactMultiplier;
+    if (newLevel >= ARTIFACT_MIN_LEVEL && rng() < artifactChance) {
       artifact = artifactFor(line);
     }
 
     // First L8 (MASTERY_LEVEL) merge in this line = mastery unlock.
     const mastered = state.masteredLines ?? [];
-    const newlyMastered = newLevel === MASTERY_LEVEL && !mastered.includes(line);
-    const nextMastered = newlyMastered ? [...mastered, line] : mastered;
+    const reachedMasteryNow = newLevel >= MASTERY_LEVEL && !mastered.includes(line);
+    const nextMastered = reachedMasteryNow ? [...mastered, line] : mastered;
 
     // Track the highest tier reached this run — used to gate prestige.
     const prevHighest = state.highestTierThisRun ?? 1;
@@ -214,13 +278,15 @@ export function applyDrop(
         from: fromIdx,
         to: toIdx,
         newLevel,
+        newLevelInitial,
         baseCoins,
         coins,
         line,
         combo,
         multiplier,
+        chainSteps,
         artifact,
-        newlyMastered: newlyMastered || undefined,
+        newlyMastered: reachedMasteryNow || undefined,
       },
     };
   }
@@ -251,7 +317,8 @@ export type SpawnOutcome =
 export function applyGeneratorTap(
   state: GameUiState,
   boardIdx: number,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  bonuses: GardenBonuses = NO_BONUSES
 ): { next: GameUiState; outcome: SpawnOutcome } {
   const cell = state.board[boardIdx];
   if (!cell || !cell.isGenerator) {
@@ -266,7 +333,9 @@ export function applyGeneratorTap(
     return { next: state, outcome: { kind: "no-space" } };
   }
 
-  const isLucky = rng() < LUCKY_CHEST_CHANCE;
+  // Moon Obelisk garden bonus boosts the lucky drop chance.
+  const luckyChance = LUCKY_CHEST_CHANCE * bonuses.surpriseMultiplier;
+  const isLucky = rng() < luckyChance;
   let newItem: BoardItem;
   if (isLucky) {
     newItem = makeLuckyChest();
@@ -348,9 +417,12 @@ function freeSlotNear(boardIdx: number, state: GameUiState): number {
  * and safe to call from any handler — only refills when at least one
  * ENERGY_REGEN_MS interval has elapsed.
  */
-export function applyEnergyTick(state: GameUiState, now: number = Date.now()): GameUiState {
-  // Combo decay — port of iOS lastMergeTimeMs check. If player paused
-  // longer than COMBO_WINDOW_MS, reset the chain.
+export function applyEnergyTick(
+  state: GameUiState,
+  now: number = Date.now(),
+  bonuses: GardenBonuses = NO_BONUSES
+): GameUiState {
+  // Combo decay — port of iOS lastMergeTimeMs check.
   let withDecay = state;
   if ((state.comboCount ?? 0) > 0) {
     const last = state.lastMergeMs ?? 0;
@@ -360,9 +432,11 @@ export function applyEnergyTick(state: GameUiState, now: number = Date.now()): G
   }
 
   if (withDecay.energy >= withDecay.energyMax) return withDecay;
-  // Stardust upgrade: each tier shortens the regen interval by 10%
+  // Stardust upgrade: each tier shortens the regen interval by 10%.
+  // Tree of Life garden bonus: divides the interval by its multiplier.
   const regenTier = withDecay.upgrades?.regenSpeedBoost ?? 0;
-  const effectiveInterval = ENERGY_REGEN_MS * Math.pow(0.9, regenTier);
+  const effectiveInterval =
+    (ENERGY_REGEN_MS * Math.pow(0.9, regenTier)) / bonuses.energyRegenMultiplier;
   const elapsed = now - withDecay.lastEnergyTimeMs;
   if (elapsed < effectiveInterval) return withDecay;
   const ticks = Math.floor(elapsed / effectiveInterval);

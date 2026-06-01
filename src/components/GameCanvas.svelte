@@ -14,7 +14,9 @@
   import { say, clearDialogue } from "$lib/lily/dialogue";
   import { trigger as triggerStory, clearSeenEpisodes } from "$lib/lily/story";
   import { gardenState, resetGarden, creditArtifact } from "$lib/store/garden";
+  import { computeGardenBonuses } from "$lib/garden/bonuses";
   import { resetSpin } from "$lib/store/spin";
+  import { claimDailyStreak, resetStreak } from "$lib/store/streak";
   import { preload } from "$lib/assets/loader";
   import { ESSENTIAL_GAME, itemSpriteUrl, generatorSpriteUrl } from "$lib/assets/manifest";
   import { schedulePush, cancelAllPushes } from "$lib/notifications";
@@ -120,7 +122,8 @@
   /** Drag/drop landed on a valid target. */
   function handleDrop(fromIdx: number, toIdx: number): boolean {
     const current = get(gameState);
-    const { next, outcome } = applyDrop(current, fromIdx, toIdx);
+    const bonuses = computeGardenBonuses(get(gardenState));
+    const { next, outcome } = applyDrop(current, fromIdx, toIdx, Math.random, bonuses);
     if (outcome.kind === "noop") return false;
 
     if (outcome.kind === "merge") {
@@ -186,7 +189,8 @@
   /** Tap on a generator → spawn a new item. */
   function handleGeneratorTap(boardIdx: number): boolean {
     const current = get(gameState);
-    const { next, outcome } = applyGeneratorTap(current, boardIdx);
+    const bonuses = computeGardenBonuses(get(gardenState));
+    const { next, outcome } = applyGeneratorTap(current, boardIdx, Math.random, bonuses);
 
     if (outcome.kind === "no-energy") {
       hapticNotify("error");
@@ -297,7 +301,8 @@
     // smooth enough for the player AND cheap on battery.
     energyTickInterval = setInterval(() => {
       const current = get(gameState);
-      const next = applyEnergyTick(current);
+      const bonuses = computeGardenBonuses(get(gardenState));
+      const next = applyEnergyTick(current, Date.now(), bonuses);
       if (next !== current) {
         gameState.set(next);
       }
@@ -312,6 +317,20 @@
     // onDestroy can clear them if the user nav'd away mid-delay.
     pendingTimeouts.push(setTimeout(() => { if (!destroyed) say("greeting"); }, 600));
     pendingTimeouts.push(setTimeout(() => { if (!destroyed) triggerStory("intro"); }, 1800));
+
+    // Daily streak claim on first mount per day. Awards coins + triggers
+    // the streak_N lore beats (3, 7, 14, 30 days).
+    const streak = claimDailyStreak();
+    if (streak.kind === "claimed") {
+      gameState.update((g) => ({ ...g, coins: g.coins + streak.coins }));
+      pendingTimeouts.push(setTimeout(() => {
+        if (destroyed) return;
+        if (streak.streak >= 30) triggerStory("streak_30");
+        else if (streak.streak >= 14) triggerStory("streak_14");
+        else if (streak.streak >= 7) triggerStory("streak_7");
+        else if (streak.streak >= 3) triggerStory("streak_3");
+      }, 2400));
+    }
 
     // Eager preload of essential HD assets. The scene's onTextureLoaded
     // subscription handles the rebuild — we just kick off the loads.
@@ -399,6 +418,7 @@
       resetGame();
       resetGarden();
       resetSpin();
+      resetStreak();
       clearSeenEpisodes();
       void cancelAllPushes();
     }
