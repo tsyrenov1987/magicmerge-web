@@ -12,6 +12,9 @@
   import { say, clearDialogue } from "$lib/lily/dialogue";
   import { trigger as triggerStory, clearSeenEpisodes } from "$lib/lily/story";
   import { resetGarden } from "$lib/store/garden";
+  import { preload } from "$lib/assets/loader";
+  import { ESSENTIAL_GAME, itemSpriteUrl, generatorSpriteUrl } from "$lib/assets/manifest";
+  import { LINE_IDS } from "$lib/game/lines";
   import LilyBubble from "$components/LilyBubble.svelte";
   import TabBar from "$components/TabBar.svelte";
 
@@ -218,6 +221,30 @@
     // episode (only fires the first time per save).
     setTimeout(() => say("greeting"), 600);
     setTimeout(() => triggerStory("intro"), 1800);
+
+    // Eager preload of essential HD assets so the board upgrades from
+    // procedural placeholders to real sprites within ~1 second of mount.
+    // The rest tier up lazily as the player progresses.
+    void preload(ESSENTIAL_GAME).then(() => {
+      // Trigger a rebuild so any newly-loaded textures appear.
+      const current = get(gameState);
+      scene?.rebuild(current.boardCols, current.board, current.inventory);
+    });
+
+    // Second tier of preload — generators + tier 2-5 items in the
+    // background. Fires after essentials land. No await — fire-and-forget.
+    void preload(ESSENTIAL_GAME).then(() => {
+      const tier2to5: string[] = [];
+      for (const line of LINE_IDS) {
+        for (let t = 2; t <= 5; t++) tier2to5.push(itemSpriteUrl(line, t));
+      }
+      for (let g = 2; g <= 5; g++) tier2to5.push(generatorSpriteUrl(g));
+      void preload(tier2to5).then(() => {
+        const current = get(gameState);
+        scene?.rebuild(current.boardCols, current.board, current.inventory);
+      });
+    });
+
     return unsubscribe;
   }
 

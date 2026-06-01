@@ -1,7 +1,16 @@
 <script lang="ts">
-  import { activeEpisode, dismissEpisode, STORY, characterEmoji, localizeTitle, localizeBody, localizeName } from "$lib/lily/story";
+  import { activeEpisode, dismissEpisode, STORY, characterEmoji, localizeTitle, localizeBody, localizeName, type StoryCharacter } from "$lib/lily/story";
   import { locale, tt } from "$lib/i18n";
+  import { LILY_URL, SAFFI_URL, ROOT_URL } from "$lib/assets/manifest";
   import { fly, fade } from "svelte/transition";
+
+  function characterImageUrl(c: StoryCharacter): string {
+    switch (c) {
+      case "lily": return LILY_URL;
+      case "root": return ROOT_URL;
+      case "sage": return SAFFI_URL;
+    }
+  }
 
   const continueLabel = $derived(tt($locale, "Дальше", "Continue", "Continuar"));
 
@@ -48,7 +57,9 @@
     aria-labelledby="story-title"
   >
     <header>
-      <div class="avatar" aria-hidden="true">{characterEmoji(line.character)}</div>
+      <div class="avatar" aria-hidden="true">
+        <img src={characterImageUrl(line.character)} alt="" decoding="async" draggable="false" />
+      </div>
       <div class="who">
         <div class="name">{localizeName(line.character, $locale)}</div>
       </div>
@@ -95,15 +106,21 @@
     margin-bottom: 16px;
   }
   .avatar {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--accent);
-    border-radius: 12px;
-    font-size: 26px;
+    background: color-mix(in srgb, var(--accent) 30%, #1A1424 70%);
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .who {
     flex: 1;

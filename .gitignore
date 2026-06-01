@@ -9,3 +9,5 @@ dist/
 .svelte-kit/
 .idea/
 .vscode/
+
+# Build outputs only — public assets are tracked.

@@ -5,6 +5,7 @@
   import { gameState } from "$lib/store/game";
   import { gardenState, applyBuild, applyCollect, applyGardenTick } from "$lib/store/garden";
   import { BUILDINGS, BUILDING_IDS, meetsArtifactReqs, type BuildingId, type BuildingDef } from "$lib/garden/buildings";
+  import { buildingSpriteUrl } from "$lib/assets/manifest";
   import { locale, tt } from "$lib/i18n";
   import { haptic, hapticNotify } from "$lib/telegram";
   import TabBar from "$components/TabBar.svelte";
@@ -149,7 +150,14 @@
             <span class="plot-emoji empty-emoji" aria-hidden="true">＋</span>
             <span class="plot-label">{labelEmpty}</span>
           {:else if def}
-            <span class="plot-emoji" aria-hidden="true">{def.emoji}</span>
+            <img
+              class="plot-image"
+              src={buildingSpriteUrl(def.id)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+            />
             {#if plot.kind === "ready"}
               <span class="plot-label ready-label">{labelReady}</span>
               <span class="plot-coins">+{def.rewardCoins} 🪙</span>
@@ -192,7 +200,14 @@
             style="--accent: #{def.accent.toString(16).padStart(6, '0')};"
             onclick={() => chooseBuilding(id)}
           >
-            <span class="b-emoji" aria-hidden="true">{def.emoji}</span>
+            <img
+              class="b-image"
+              src={buildingSpriteUrl(def.id)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+            />
             <span class="b-text">
               <span class="b-name">{localizeName(def)}</span>
               <span class="b-bonus">{localizeBonus(def)}</span>
@@ -317,6 +332,13 @@
     font-size: 30px;
     opacity: 0.4;
   }
+  .plot-image {
+    width: 72%;
+    height: 72%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+    pointer-events: none;
+  }
   .plot-label {
     font-size: 12px;
     opacity: 0.85;
@@ -398,6 +420,13 @@
     flex-shrink: 0;
     width: 36px;
     text-align: center;
+  }
+  .b-image {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));
   }
   .b-text {
     flex: 1;
