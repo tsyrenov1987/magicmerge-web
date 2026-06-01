@@ -22,9 +22,15 @@
  *   server-side. Same flow for both refer-er rewards and referee welcome.
  */
 
+/**
+ * Reward shape shared by referral and tasks systems. Both write into the
+ * same per-user pendingRewards queue, so the client only has one drain
+ * path to maintain.
+ */
 export type ReferralReward =
   | { kind: "energy"; amount: number }
-  | { kind: "lucky_chest"; amount: number };
+  | { kind: "lucky_chest"; amount: number }
+  | { kind: "coins"; amount: number };
 
 export interface ReferralRecord {
   /** Total successful attributions (rewarded + capped). */
@@ -72,8 +78,12 @@ function emptyRecord(now: number = Date.now()): ReferralRecord {
   };
 }
 
-async function readRecord(kv: KVNamespace, refererId: number): Promise<ReferralRecord> {
-  const raw = await kv.get(`ref:${refererId}`);
+/**
+ * Read the user's referral record (totals + pending rewards queue).
+ * Exported so the tasks module can mint rewards into the same queue.
+ */
+export async function readReferralRecord(kv: KVNamespace, userId: number): Promise<ReferralRecord> {
+  const raw = await kv.get(`ref:${userId}`);
   if (!raw) return emptyRecord();
   try {
     return JSON.parse(raw) as ReferralRecord;
@@ -82,8 +92,13 @@ async function readRecord(kv: KVNamespace, refererId: number): Promise<ReferralR
   }
 }
 
-async function writeRecord(kv: KVNamespace, refererId: number, rec: ReferralRecord): Promise<void> {
-  await kv.put(`ref:${refererId}`, JSON.stringify(rec));
+/** Persist the user's referral record. */
+export async function writeReferralRecord(
+  kv: KVNamespace,
+  userId: number,
+  rec: ReferralRecord
+): Promise<void> {
+  await kv.put(`ref:${userId}`, JSON.stringify(rec));
 }
 
 /**
@@ -118,7 +133,7 @@ export async function attributeReferral(
   await kv.put(`referredBy:${newUserId}`, String(refererId));
 
   // Update referer's record
-  const referer = await readRecord(kv, refererId);
+  const referer = await readReferralRecord(kv, refererId);
 
   // Reset daily counter if the UTC day has rolled over
   const today = utcDayKey(now);
@@ -136,14 +151,14 @@ export async function attributeReferral(
   // else: attribution recorded for the count, but no reward minted
   // — prevents farming via burst invites in a short window.
 
-  await writeRecord(kv, refererId, referer);
+  await writeReferralRecord(kv, refererId, referer);
 
   // Stage the welcome bundle into the REFEREE's own record. The referee
   // picks it up on their first /api/referral/status call and claims it
   // through the same drain endpoint as referer rewards.
-  const referee = await readRecord(kv, newUserId);
+  const referee = await readReferralRecord(kv, newUserId);
   referee.pendingRewards.push(...WELCOME_REWARD);
-  await writeRecord(kv, newUserId, referee);
+  await writeReferralRecord(kv, newUserId, referee);
 
   return { ok: true, status: "new" };
 }
@@ -163,12 +178,12 @@ export async function getReferralStatus(
   todayRewarded: number;
   dailyCap: number;
 }> {
-  const rec = await readRecord(kv, userId);
+  const rec = await readReferralRecord(kv, userId);
   // Refresh today key on read so the UI doesn't show stale day labels
   if (rec.todayKey !== utcDayKey(now)) {
     rec.todayKey = utcDayKey(now);
     rec.todayRewarded = 0;
-    await writeRecord(kv, userId, rec);
+    await writeReferralRecord(kv, userId, rec);
   }
   return {
     totalReferrals: rec.totalReferrals,
@@ -190,11 +205,11 @@ export async function claimPendingRewards(
   kv: KVNamespace,
   userId: number
 ): Promise<ReferralReward[]> {
-  const rec = await readRecord(kv, userId);
+  const rec = await readReferralRecord(kv, userId);
   const drained = rec.pendingRewards.slice();
   if (drained.length === 0) return [];
   rec.pendingRewards = [];
-  await writeRecord(kv, userId, rec);
+  await writeReferralRecord(kv, userId, rec);
   return drained;
 }
 

@@ -37,12 +37,25 @@ import {
   getReferralStatus,
   claimPendingRewards,
 } from "./referral";
+import {
+  claimTask,
+  getTasksStatus,
+  markBotStarted,
+  type TaskId,
+} from "./tasks";
 
 export interface Env {
   TG_BOT_TOKEN: string;
   NOTIFICATIONS: KVNamespace;
   WEBAPP_ORIGIN: string;
   MINI_APP_URL: string;
+  /**
+   * Optional: chat id of the community channel ("@MagicMergeChannel" or
+   * "-1001234567890"). Required for the subscribe_channel task verification.
+   * Bot must be admin of the channel for getChatMember to succeed.
+   * When unset, the task surfaces as "unverifiable" and stays inert.
+   */
+  CHANNEL_CHAT_ID?: string;
 }
 
 // ---- HTTP fetch handler ----
@@ -142,6 +155,11 @@ async function handleMessage(msg: TgMessage, env: Env): Promise<void> {
         // pendingRewards queue on a "new" attribution.
         await attributeReferral(env.NOTIFICATIONS, refererId, newUserId);
       }
+    }
+    // Mark this user as having started the bot in DM — this unlocks the
+    // enable_notifications task AND enables push notifications later.
+    if (newUserId && msg.chat.type === "private") {
+      await markBotStarted(env.NOTIFICATIONS, newUserId);
     }
     await tgSendMessage(env.TG_BOT_TOKEN, chatId, greeting(lang), {
       reply_markup: {
@@ -356,6 +374,41 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     }
     const drained = await claimPendingRewards(env.NOTIFICATIONS, body.userId);
     return cors(json({ ok: true, claimed: drained }), env);
+  }
+
+  // ---- Tasks endpoints ----
+
+  if (url.pathname === "/api/tasks/status" && req.method === "GET") {
+    const userIdStr = url.searchParams.get("userId");
+    const userId = userIdStr ? Number(userIdStr) : NaN;
+    if (!Number.isFinite(userId)) {
+      return cors(json({ ok: false, error: "bad userId" }, 400), env);
+    }
+    const status = await getTasksStatus(
+      { TG_BOT_TOKEN: env.TG_BOT_TOKEN, CHANNEL_CHAT_ID: env.CHANNEL_CHAT_ID },
+      env.NOTIFICATIONS,
+      userId
+    );
+    return cors(json({ ok: true, tasks: status }), env);
+  }
+
+  if (url.pathname === "/api/tasks/claim" && req.method === "POST") {
+    let body: { userId?: number; taskId?: TaskId };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return cors(json({ ok: false, error: "bad json" }, 400), env);
+    }
+    if (typeof body.userId !== "number" || typeof body.taskId !== "string") {
+      return cors(json({ ok: false, error: "missing fields" }, 400), env);
+    }
+    const result = await claimTask(
+      { TG_BOT_TOKEN: env.TG_BOT_TOKEN, CHANNEL_CHAT_ID: env.CHANNEL_CHAT_ID },
+      env.NOTIFICATIONS,
+      body.userId,
+      body.taskId
+    );
+    return cors(json({ ok: true, ...result }), env);
   }
 
   return cors(json({ ok: false, error: "unknown route" }, 404), env);

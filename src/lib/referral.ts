@@ -20,7 +20,8 @@ const BOT_API = import.meta.env.VITE_BOT_API as string | undefined;
 
 export type ReferralReward =
   | { kind: "energy"; amount: number }
-  | { kind: "lucky_chest"; amount: number };
+  | { kind: "lucky_chest"; amount: number }
+  | { kind: "coins"; amount: number };
 
 export interface ReferralStatus {
   totalReferrals: number;

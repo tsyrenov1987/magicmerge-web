@@ -130,6 +130,55 @@ export async function tgAnswerCallback(
 }
 
 /**
+ * Chat member status returned by getChatMember. We only care about "left"
+ * vs "subscribed-ish" (member / administrator / creator / restricted) for
+ * the channel-subscription task verification.
+ */
+export type TgChatMemberStatus =
+  | "creator"
+  | "administrator"
+  | "member"
+  | "restricted"
+  | "left"
+  | "kicked";
+
+export interface TgChatMember {
+  status: TgChatMemberStatus;
+  user?: TgUser;
+}
+
+/**
+ * Wrapper around Telegram's getChatMember. Used to verify that a user has
+ * actually joined our community channel before granting the Task reward.
+ *
+ * The bot must be an admin of the channel for this to succeed. Channel
+ * can be either a numeric id ("-1001234567890") or a public @username.
+ *
+ * Returns undefined on network / API errors so the caller can degrade
+ * gracefully ("task not verifiable right now").
+ */
+export async function tgGetChatMember(
+  botToken: string,
+  chatId: string,
+  userId: number
+): Promise<TgChatMember | undefined> {
+  const url = `${TG_BASE}${botToken}/getChatMember`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, user_id: userId }),
+    });
+    const data = (await res.json()) as { ok?: boolean; result?: TgChatMember };
+    if (!res.ok || data.ok === false || !data.result) return undefined;
+    return data.result;
+  } catch (e) {
+    console.error("[telegram] getChatMember failed", e);
+    return undefined;
+  }
+}
+
+/**
  * Set the bot's webhook URL. Run once after first deploy; idempotent.
  */
 export async function tgSetWebhook(botToken: string, url: string): Promise<unknown> {

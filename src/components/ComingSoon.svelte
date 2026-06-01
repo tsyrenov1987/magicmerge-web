@@ -4,11 +4,18 @@
   import { BG_NIGHT } from "$lib/assets/manifest";
   import AboutModal from "$components/AboutModal.svelte";
   import ReferralModal from "$components/ReferralModal.svelte";
+  import TasksModal from "$components/TasksModal.svelte";
   import { referralStatus } from "$lib/store/referral";
+  import { tasksStatus } from "$lib/store/tasks";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
   let aboutOpen = $state(false);
   let referralOpen = $state(false);
+  let tasksOpen = $state(false);
+
+  const readyTasksCount = $derived(
+    $tasksStatus.filter((t) => t.state === "ready").length
+  );
 
   // Reactive: derives re-evaluate when $locale changes
   const greeting = $derived(
@@ -81,6 +88,7 @@
       "Invitar amigos"
     )
   );
+  const labelTasks = $derived(tt($locale, "Задания", "Tasks", "Misiones"));
 </script>
 
 <div class="card">
@@ -122,12 +130,20 @@
   </div>
 
   {#if inTg}
-    <button type="button" class="share-btn" onclick={() => (referralOpen = true)}>
-      🎁 {labelInvite}
-      {#if $referralStatus.pendingRewards.length > 0}
-        <span class="badge">{$referralStatus.pendingRewards.length}</span>
-      {/if}
-    </button>
+    <div class="cta-row">
+      <button type="button" class="share-btn" onclick={() => (referralOpen = true)}>
+        🎁 {labelInvite}
+        {#if $referralStatus.pendingRewards.length > 0}
+          <span class="badge">{$referralStatus.pendingRewards.length}</span>
+        {/if}
+      </button>
+      <button type="button" class="share-btn tasks-btn" onclick={() => (tasksOpen = true)}>
+        📋 {labelTasks}
+        {#if readyTasksCount > 0}
+          <span class="badge">{readyTasksCount}</span>
+        {/if}
+      </button>
+    </div>
   {/if}
 
   {#if !inTg}
@@ -143,6 +159,7 @@
 
 <AboutModal bind:open={aboutOpen} />
 <ReferralModal bind:open={referralOpen} />
+<TasksModal bind:open={tasksOpen} />
 
 <style>
   .card {
@@ -255,6 +272,25 @@
   }
   .share-btn:hover {
     background: linear-gradient(180deg, rgba(232, 164, 242, 0.28) 0%, rgba(176, 98, 214, 0.28) 100%);
+  }
+  .cta-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .cta-row .share-btn {
+    margin-top: 0;
+    flex: 1 1 0;
+    min-width: 140px;
+  }
+  .tasks-btn {
+    background: linear-gradient(180deg, rgba(108, 218, 124, 0.18) 0%, rgba(63, 142, 78, 0.22) 100%);
+    border-color: rgba(108, 218, 124, 0.4);
+  }
+  .tasks-btn:hover {
+    background: linear-gradient(180deg, rgba(108, 218, 124, 0.28) 0%, rgba(63, 142, 78, 0.32) 100%);
   }
   .share-btn .badge {
     position: absolute;

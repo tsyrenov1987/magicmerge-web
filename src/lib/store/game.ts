@@ -297,7 +297,7 @@ export function applyStarsAward(state: GameUiState, productId: string): GameUiSt
  */
 export function applyReferralReward(
   state: GameUiState,
-  reward: { kind: "energy" | "lucky_chest"; amount: number }
+  reward: { kind: "energy" | "lucky_chest" | "coins"; amount: number }
 ): GameUiState {
   if (reward.kind === "energy") {
     const cap = Math.floor(state.energyMax * 1.5);
@@ -308,6 +308,9 @@ export function applyReferralReward(
       ...state,
       luckyChestTokens: (state.luckyChestTokens ?? 0) + reward.amount,
     };
+  }
+  if (reward.kind === "coins") {
+    return { ...state, coins: state.coins + reward.amount };
   }
   return state;
 }
