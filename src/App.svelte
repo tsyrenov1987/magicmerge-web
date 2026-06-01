@@ -8,8 +8,13 @@
   import { initFirebase } from "$lib/firebase";
   import { tgUser, isInTelegram, bindBackButton } from "$lib/telegram";
   import { uiView, setView } from "$lib/store/ui";
+  import { initReferral, teardownReferral } from "$lib/store/referral";
 
   initFirebase();
+
+  // MGM init: posts referer attribution (if started via ref_<id> link)
+  // and begins polling pending rewards. Idempotent — safe across HMR.
+  void initReferral();
 
   const user = tgUser();
   const inTg = isInTelegram();
@@ -28,6 +33,7 @@
 
   onDestroy(() => {
     unbindBack?.();
+    teardownReferral();
   });
 </script>
 

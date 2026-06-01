@@ -27,6 +27,7 @@
   import ShopModal from "$components/ShopModal.svelte";
   import StoryLogView from "$components/StoryLogView.svelte";
   import LeaderboardModal from "$components/LeaderboardModal.svelte";
+  import ShareToast from "$components/ShareToast.svelte";
   import { seenEpisodes } from "$lib/lily/story";
   import { currentUser } from "$lib/firebase";
   import { enableCloudSync, pullSnapshot, flushAndDisable } from "$lib/cloudSync";
@@ -48,6 +49,13 @@
   const SLEEPY_DELAY_MS = 45000;
   let lastInteractionMs = performance.now();
   let lilyAwayFromHome = false;
+
+  // Share-result toast: shown after a Tier >= 6 merge to nudge a referral.
+  // Tier 6+ is rare enough (~once per session) that it doesn't feel spammy.
+  const SHARE_TIER_THRESHOLD = 6;
+  let shareToastOpen = $state(false);
+  let shareToastTier = $state(0);
+  let shareToastLine = $state<LineId | undefined>(undefined);
 
   /** Maps a mastered line to its lore episode trigger id. */
   const MASTERY_EVENT_FOR_LINE: Record<LineId, StoryEvent> = {
@@ -188,6 +196,15 @@
           // mastery_gift is the meta lore episode shown on the FIRST line
           // mastered in the whole save. iOS triggers it once.
           triggerStory("mastery_gift");
+        }
+
+        // MGM nudge: high-tier merges are inherently brag-worthy, so we
+        // surface a small "share with friends" toast. Threshold is high
+        // enough (T6) to avoid spamming on routine merges.
+        if (outcome.newLevel >= SHARE_TIER_THRESHOLD && !shareToastOpen) {
+          shareToastTier = outcome.newLevel;
+          shareToastLine = line;
+          shareToastOpen = true;
         }
       });
       haptic("heavy");
@@ -583,6 +600,7 @@
   <ShopModal bind:open={shopOpen} />
   <StoryLogView bind:open={storyLogOpen} />
   <LeaderboardModal bind:open={leaderboardOpen} />
+  <ShareToast bind:open={shareToastOpen} tier={shareToastTier} line={shareToastLine} />
 
   <div bind:this={mountTarget} class="canvas-host">
     <LilyBubble />

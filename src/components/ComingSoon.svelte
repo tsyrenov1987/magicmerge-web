@@ -1,12 +1,14 @@
 <script lang="ts">
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
   import { setView } from "$lib/store/ui";
-  import { shareInvite } from "$lib/telegram";
   import { BG_NIGHT } from "$lib/assets/manifest";
   import AboutModal from "$components/AboutModal.svelte";
+  import ReferralModal from "$components/ReferralModal.svelte";
+  import { referralStatus } from "$lib/store/referral";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
   let aboutOpen = $state(false);
+  let referralOpen = $state(false);
 
   // Reactive: derives re-evaluate when $locale changes
   const greeting = $derived(
@@ -71,26 +73,14 @@
     setView("game");
   }
 
-  const labelShare = $derived(
+  const labelInvite = $derived(
     tt(
       $locale,
-      "Поделиться с друзьями",
-      "Share with friends",
-      "Compartir con amigos"
+      "Пригласить друзей",
+      "Invite friends",
+      "Invitar amigos"
     )
   );
-  const shareText = $derived(
-    tt(
-      $locale,
-      "🧚 Magic Merge — уютная игра-слияние с феей Лили",
-      "🧚 Magic Merge — a cozy merge puzzle with Lily the fairy",
-      "🧚 Magic Merge — un puzzle de fusiones acogedor con el hada Lily"
-    )
-  );
-
-  function onShare() {
-    void shareInvite(shareText, "game");
-  }
 </script>
 
 <div class="card">
@@ -132,8 +122,11 @@
   </div>
 
   {#if inTg}
-    <button type="button" class="share-btn" onclick={onShare}>
-      ↗ {labelShare}
+    <button type="button" class="share-btn" onclick={() => (referralOpen = true)}>
+      🎁 {labelInvite}
+      {#if $referralStatus.pendingRewards.length > 0}
+        <span class="badge">{$referralStatus.pendingRewards.length}</span>
+      {/if}
     </button>
   {/if}
 
@@ -149,6 +142,7 @@
 </div>
 
 <AboutModal bind:open={aboutOpen} />
+<ReferralModal bind:open={referralOpen} />
 
 <style>
   .card {
@@ -246,20 +240,36 @@
     font-style: italic;
   }
   .share-btn {
+    position: relative;
     margin-top: 16px;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.86);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 10px 22px;
+    background: linear-gradient(180deg, rgba(232, 164, 242, 0.18) 0%, rgba(176, 98, 214, 0.18) 100%);
+    color: #fff;
+    border: 1px solid rgba(232, 164, 242, 0.4);
+    padding: 12px 26px;
     border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     cursor: pointer;
     letter-spacing: 0.3px;
     transition: background 0.15s ease;
   }
   .share-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: linear-gradient(180deg, rgba(232, 164, 242, 0.28) 0%, rgba(176, 98, 214, 0.28) 100%);
+  }
+  .share-btn .badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #ffd96b;
+    color: #1a1424;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 20px;
+    height: 20px;
+    line-height: 20px;
+    padding: 0 6px;
+    box-shadow: 0 2px 8px rgba(255, 217, 107, 0.5);
   }
   .about-btn {
     margin-top: 16px;

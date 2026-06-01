@@ -32,6 +32,11 @@ import {
   recordPayment,
   consumePaymentsForUser,
 } from "./payments";
+import {
+  attributeReferral,
+  getReferralStatus,
+  claimPendingRewards,
+} from "./referral";
 
 export interface Env {
   TG_BOT_TOKEN: string;
@@ -124,6 +129,20 @@ async function handleMessage(msg: TgMessage, env: Env): Promise<void> {
   const lang = msg.from?.language_code?.slice(0, 2) ?? "en";
 
   if (text === "/start" || text.startsWith("/start ")) {
+    // /start ref_<refererId> deep link: attribute the referral server-side
+    // BEFORE we hand off to the WebApp. The client still also calls
+    // /api/referral/attribute on launch in case the player taps the bare
+    // /start (no arg) and a previous chat session has a buffered ref param.
+    const startArg = text.split(/\s+/)[1];
+    const newUserId = msg.from?.id;
+    if (startArg && newUserId && startArg.startsWith("ref_")) {
+      const refererId = Number(startArg.slice(4));
+      if (Number.isFinite(refererId) && refererId > 0) {
+        // attributeReferral stages welcome reward into the referee's own
+        // pendingRewards queue on a "new" attribution.
+        await attributeReferral(env.NOTIFICATIONS, refererId, newUserId);
+      }
+    }
     await tgSendMessage(env.TG_BOT_TOKEN, chatId, greeting(lang), {
       reply_markup: {
         inline_keyboard: [
@@ -151,7 +170,13 @@ async function handleMessage(msg: TgMessage, env: Env): Promise<void> {
   }
 
   if (text === "/share") {
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(env.MINI_APP_URL)}&text=${encodeURIComponent(shareTextFor(lang))}`;
+    // Build a personalised invite URL with this user's referral code so
+    // their friends are auto-attributed when they tap Play.
+    const senderId = msg.from?.id;
+    const refLink = senderId
+      ? `${env.MINI_APP_URL}?startapp=ref_${senderId}`
+      : env.MINI_APP_URL;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(shareTextFor(lang))}`;
     await tgSendMessage(env.TG_BOT_TOKEN, chatId, shareTipText(lang), {
       reply_markup: {
         inline_keyboard: [[{ text: shareButtonLabel(lang), url: shareUrl }]],
@@ -278,6 +303,59 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     }
     const payments = await consumePaymentsForUser(env.NOTIFICATIONS, userId);
     return cors(json({ ok: true, payments }), env);
+  }
+
+  // ---- Referral / MGM endpoints ----
+
+  if (url.pathname === "/api/referral/attribute" && req.method === "POST") {
+    let body: { refererId?: number; newUserId?: number };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return cors(json({ ok: false, error: "bad json" }, 400), env);
+    }
+    if (typeof body.refererId !== "number" || typeof body.newUserId !== "number") {
+      return cors(json({ ok: false, error: "missing fields" }, 400), env);
+    }
+    const result = await attributeReferral(
+      env.NOTIFICATIONS,
+      body.refererId,
+      body.newUserId
+    );
+    return cors(json({ ok: true, status: result.status }), env);
+  }
+
+  if (url.pathname === "/api/referral/status" && req.method === "GET") {
+    const userIdStr = url.searchParams.get("userId");
+    const userId = userIdStr ? Number(userIdStr) : NaN;
+    if (!Number.isFinite(userId)) {
+      return cors(json({ ok: false, error: "bad userId" }, 400), env);
+    }
+    const status = await getReferralStatus(env.NOTIFICATIONS, userId);
+    return cors(
+      json({
+        ok: true,
+        totalReferrals: status.totalReferrals,
+        pendingRewards: status.pendingRewards,
+        todayRewarded: status.todayRewarded,
+        dailyCap: status.dailyCap,
+      }),
+      env
+    );
+  }
+
+  if (url.pathname === "/api/referral/claim" && req.method === "POST") {
+    let body: { userId?: number };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return cors(json({ ok: false, error: "bad json" }, 400), env);
+    }
+    if (typeof body.userId !== "number") {
+      return cors(json({ ok: false, error: "missing userId" }, 400), env);
+    }
+    const drained = await claimPendingRewards(env.NOTIFICATIONS, body.userId);
+    return cors(json({ ok: true, claimed: drained }), env);
   }
 
   return cors(json({ ok: false, error: "unknown route" }, 404), env);

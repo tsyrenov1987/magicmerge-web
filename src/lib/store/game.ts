@@ -52,6 +52,12 @@ export interface GameUiState {
     /** Each tier: −10% to ENERGY_REGEN_MS effective (capped at 4 = ~40% faster) */
     regenSpeedBoost?: number;
   };
+  /**
+   * Lucky Chest tokens earned via referrals. Each token lets the player
+   * spawn a Lucky Chest directly on the next free slot (bypasses RNG).
+   * Surfaced as a HUD button when > 0.
+   */
+  luckyChestTokens?: number;
 }
 
 const STORAGE_KEY = "magicmerge.game";
@@ -280,6 +286,30 @@ export function applyStarsAward(state: GameUiState, productId: string): GameUiSt
     default:
       return state;
   }
+}
+
+/**
+ * Apply a single referral reward bundle entry to the game state. Energy
+ * is capped at energyMax + 50% headroom so a friend bomb doesn't stuff
+ * the bar past what the player can spend in one session (still generous).
+ * Lucky Chest tokens accumulate uncapped — they're consumed manually via
+ * the HUD button.
+ */
+export function applyReferralReward(
+  state: GameUiState,
+  reward: { kind: "energy" | "lucky_chest"; amount: number }
+): GameUiState {
+  if (reward.kind === "energy") {
+    const cap = Math.floor(state.energyMax * 1.5);
+    return { ...state, energy: Math.min(cap, state.energy + reward.amount) };
+  }
+  if (reward.kind === "lucky_chest") {
+    return {
+      ...state,
+      luckyChestTokens: (state.luckyChestTokens ?? 0) + reward.amount,
+    };
+  }
+  return state;
 }
 
 export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {
