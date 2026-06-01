@@ -1,19 +1,20 @@
 /**
  * Lily — the fairy companion.
  *
- * Phase 2.A laid the visual sprite + idle bob + wing flutter.
- * Phase 2.B adds a behavior state machine:
- *   - idle      → bobbing at home corner
- *   - attention → fly to a target slot and hover with a downward nudge
- *   - celebrate → quick swoop near a merge spot + sparkle burst
- *   - sleepy    → slower bob, slight droop, dimmer glow
+ * Two visual modes:
+ *   1. Procedural placeholder (Graphics body, wings, wand) — shown
+ *      immediately on construction so the player isn't staring at an
+ *      empty corner while the HD asset loads.
+ *   2. HD sprite (lily_fairy.webp) — swapped in once the texture lands.
  *
- * Transitions are driven by GameCanvas via setMood() + flyTo() /
- * celebrate(); the controller doesn't observe state itself.
+ * The sprite's container (`root`) is what flies / bobs / celebrates,
+ * so the behavior state machine doesn't care which mode is active.
  */
 
-import { Container, Graphics, Ticker } from "pixi.js";
+import { Container, Graphics, Sprite, Ticker } from "pixi.js";
 import { tweenTo, tweenAlpha, ease } from "./tween";
+import { LILY_URL } from "$lib/assets/manifest";
+import { loadTexture, textureFor } from "$lib/assets/loader";
 
 const BODY_PRIMARY = 0xe8a4f2;
 const BODY_HIGHLIGHT = 0xf5d9f7;
@@ -25,7 +26,7 @@ const GLOW = 0xff9eff;
 const SPARKLE_COLORS = [0xfff1c2, 0xffe899, 0xf5d9f7, 0xa8d8e8];
 
 const FLY_DURATION = 520;
-const HOVER_OFFSET_Y = -56; // hover above the target cell by this many px
+const HOVER_OFFSET_Y = -56;
 const CELEBRATE_DURATION = 700;
 
 export type LilyMood = "idle" | "attention" | "celebrate" | "sleepy";
@@ -41,11 +42,15 @@ export class Lily {
   private parent: Container;
   private root: Container;
   private sparkleLayer: Container;
-  private leftWing!: Graphics;
-  private rightWing!: Graphics;
-  private body!: Graphics;
   private glow!: Graphics;
-  private wand!: Graphics;
+
+  /** Procedural placeholder layer — destroyed when HD swaps in. */
+  private placeholder?: Container;
+  private leftWing?: Graphics;
+  private rightWing?: Graphics;
+  /** HD sprite — created lazily on texture load. */
+  private hdSprite?: Sprite;
+
   private size: number;
   private homeX: number;
   private homeY: number;
@@ -54,12 +59,18 @@ export class Lily {
   private tickFn: (t: { deltaMS: number }) => void;
   private cancelFly: (() => void) | null = null;
   private cancelAlpha: (() => void) | null = null;
+  private destroyedFlag = false;
+
+  private currentY = 0;
+  private targetX = 0;
 
   constructor(opts: LilyOptions) {
     this.parent = opts.parent;
     this.size = opts.size ?? 56;
     this.homeX = opts.x;
     this.homeY = opts.y;
+    this.currentY = opts.y;
+    this.targetX = opts.x;
 
     this.root = new Container();
     this.root.label = "lily";
@@ -73,28 +84,47 @@ export class Lily {
     this.sparkleLayer.eventMode = "none";
     this.parent.addChild(this.sparkleLayer);
 
-    this.build();
+    this.buildGlow();
+
+    // If the HD texture is already in the cache (preload chain), skip the
+    // procedural step and mount the sprite directly.
+    const cached = textureFor(LILY_URL);
+    if (cached) {
+      this.mountHd();
+    } else {
+      this.buildPlaceholder();
+      void loadTexture(LILY_URL).then((tex) => {
+        if (this.destroyedFlag || !tex) return;
+        this.swapToHd();
+      });
+    }
 
     this.tickFn = (t) => this.tick(t.deltaMS);
     Ticker.shared.add(this.tickFn);
   }
 
-  private build(): void {
-    const s = this.size;
+  // ---- visual construction ----
 
+  private buildGlow(): void {
     this.glow = new Graphics();
-    this.glow.circle(0, 0, s * 0.95).fill({ color: GLOW, alpha: 0.18 });
+    this.glow.circle(0, 0, this.size * 0.95).fill({ color: GLOW, alpha: 0.18 });
     this.root.addChild(this.glow);
+  }
+
+  private buildPlaceholder(): void {
+    const s = this.size;
+    const placeholder = new Container();
+    placeholder.label = "lily:placeholder";
 
     this.leftWing = this.makeWing(-1);
     this.rightWing = this.makeWing(1);
-    this.root.addChild(this.leftWing);
-    this.root.addChild(this.rightWing);
+    placeholder.addChild(this.leftWing);
+    placeholder.addChild(this.rightWing);
 
-    this.body = new Graphics();
+    const body = new Graphics();
     const bodyW = s * 0.42;
     const bodyH = s * 0.62;
-    this.body
+    body
       .ellipse(0, s * 0.05, bodyW, bodyH)
       .fill({ color: BODY_SHADOW, alpha: 0.6 })
       .ellipse(0, 0, bodyW, bodyH)
@@ -105,15 +135,50 @@ export class Lily {
       .fill({ color: BODY_PRIMARY })
       .circle(-bodyW * 0.18, -bodyH * 0.95, bodyW * 0.22)
       .fill({ color: BODY_HIGHLIGHT, alpha: 0.6 });
-    this.root.addChild(this.body);
+    placeholder.addChild(body);
 
-    this.wand = new Graphics();
-    this.wand
+    const wand = new Graphics();
+    wand
       .circle(bodyW * 1.4, -bodyH * 0.4, s * 0.04)
       .fill({ color: WAND_TIP })
       .circle(bodyW * 1.4, -bodyH * 0.4, s * 0.08)
       .fill({ color: WAND_TIP, alpha: 0.35 });
-    this.root.addChild(this.wand);
+    placeholder.addChild(wand);
+
+    this.placeholder = placeholder;
+    this.root.addChild(placeholder);
+  }
+
+  private mountHd(): void {
+    const tex = textureFor(LILY_URL);
+    if (!tex) return;
+    const sprite = new Sprite(tex);
+    sprite.anchor.set(0.5, 0.5);
+    // Lily art renders larger than item sprites — character is the focal
+    // point of the corner.
+    const longSide = Math.max(tex.width, tex.height);
+    const scale = (this.size * 1.7) / longSide;
+    sprite.scale.set(scale);
+    this.hdSprite = sprite;
+    this.root.addChild(sprite);
+  }
+
+  /** Fade out the procedural placeholder while fading in the HD sprite. */
+  private swapToHd(): void {
+    this.mountHd();
+    const sprite = this.hdSprite;
+    const placeholder = this.placeholder;
+    if (!sprite || !placeholder) return;
+    sprite.alpha = 0;
+    tweenAlpha(sprite, 0, 1, 280, ease.outCubic);
+    tweenAlpha(placeholder, placeholder.alpha, 0, 240, ease.outCubic, () => {
+      if (placeholder.destroyed) return;
+      this.root.removeChild(placeholder);
+      placeholder.destroy({ children: true });
+      this.placeholder = undefined;
+      this.leftWing = undefined;
+      this.rightWing = undefined;
+    });
   }
 
   private makeWing(side: 1 | -1): Graphics {
@@ -129,6 +194,8 @@ export class Lily {
     return g;
   }
 
+  // ---- animation loop ----
+
   private tick(deltaMs: number): void {
     if (this.root.destroyed) return;
     this.elapsed += deltaMs;
@@ -138,18 +205,30 @@ export class Lily {
     const bobPeriod = this.mood === "sleepy" ? 700 : 380;
     const bob = Math.sin(this.elapsed / bobPeriod) * (this.size * 0.06 * bobAmpScale);
 
-    // Only apply bob when not actively traveling — flyTo owns position
-    // while a tween is in flight.
     if (!this.cancelFly) {
       this.root.y = this.currentY + bob;
     }
 
-    const flutterPeriod =
-      this.mood === "sleepy" ? 120 : this.mood === "celebrate" ? 35 : 55;
-    const flutterAmp = this.mood === "sleepy" ? 0.08 : 0.15;
-    const flutter = 0.85 + flutterAmp * Math.sin(this.elapsed / flutterPeriod);
-    this.leftWing.scale.x = flutter;
-    this.rightWing.scale.x = flutter;
+    // Procedural wing flutter — only when placeholder still mounted
+    if (this.leftWing && this.rightWing) {
+      const flutterPeriod =
+        this.mood === "sleepy" ? 120 : this.mood === "celebrate" ? 35 : 55;
+      const flutterAmp = this.mood === "sleepy" ? 0.08 : 0.15;
+      const flutter = 0.85 + flutterAmp * Math.sin(this.elapsed / flutterPeriod);
+      this.leftWing.scale.x = flutter;
+      this.rightWing.scale.x = flutter;
+    }
+
+    // HD sprite gets a subtle full-body breathing scale — wings are baked
+    // into the texture so we don't need to fake flutter.
+    if (this.hdSprite && !this.cancelFly) {
+      const breathPeriod = this.mood === "sleepy" ? 1400 : this.mood === "celebrate" ? 280 : 720;
+      const breathAmp = this.mood === "celebrate" ? 0.05 : 0.025;
+      const breath = 1 + breathAmp * Math.sin(this.elapsed / breathPeriod);
+      const longSide = Math.max(this.hdSprite.texture.width, this.hdSprite.texture.height);
+      const baseScale = (this.size * 1.7) / longSide;
+      this.hdSprite.scale.set(baseScale * breath);
+    }
 
     const shimmer01 = 0.5 + 0.5 * Math.sin(this.elapsed / 600);
     const glowBase = this.mood === "sleepy" ? 0.65 : 0.85;
@@ -157,9 +236,7 @@ export class Lily {
     this.glow.alpha = (this.mood === "sleepy" ? 0.06 : 0.12) + 0.08 * shimmer01;
   }
 
-  /** Whichever (x, y) Lily's idle bob centers around (home OR a hover target). */
-  private currentY = 0;
-  private targetX = 0;
+  // ---- behavior API ----
 
   private setCurrentAnchor(x: number, y: number): void {
     this.targetX = x;
@@ -170,15 +247,14 @@ export class Lily {
     if (this.mood === mood) return;
     this.mood = mood;
     this.cancelAlpha?.();
-    this.cancelAlpha = tweenAlpha(
-      this.body,
-      this.body.alpha,
-      mood === "sleepy" ? 0.7 : 1,
-      300
-    );
+    const fadeTarget = mood === "sleepy" ? 0.7 : 1;
+    if (this.hdSprite) {
+      this.cancelAlpha = tweenAlpha(this.hdSprite, this.hdSprite.alpha, fadeTarget, 300);
+    } else if (this.placeholder) {
+      this.cancelAlpha = tweenAlpha(this.placeholder, this.placeholder.alpha, fadeTarget, 300);
+    }
   }
 
-  /** Fly to a board slot, hovering above it. Used by attention state. */
   flyTo(x: number, y: number, onArrive?: () => void): void {
     const anchorX = x;
     const anchorY = y + HOVER_OFFSET_Y;
@@ -199,17 +275,13 @@ export class Lily {
 
   flyHome(onArrive?: () => void): void {
     this.flyTo(this.homeX, this.homeY - HOVER_OFFSET_Y, onArrive);
-    // setCurrentAnchor was set to homeY + HOVER_OFFSET_Y by flyTo's
-    // +HOVER_OFFSET_Y math; correct it so home is the true rest position.
     this.setCurrentAnchor(this.homeX, this.homeY);
   }
 
-  /** Quick swoop + sparkle burst near (x, y). Auto-returns to home. */
   celebrate(x: number, y: number): void {
     this.spawnSparkles(x, y, 12);
     this.setMood("celebrate");
     this.cancelFly?.();
-    // Move to within ~30px of the merge spot, then return home
     this.setCurrentAnchor(x, y - 30);
     this.cancelFly = tweenTo(this.root, x, y - 30, 220, ease.outBack, () => {
       this.cancelFly = tweenTo(
@@ -254,7 +326,6 @@ export class Lily {
     }
   }
 
-  /** Reposition the home corner (used on viewport resize). */
   moveTo(x: number, y: number): void {
     const wasAtHome = this.mood === "idle" && !this.cancelFly;
     this.homeX = x;
@@ -267,6 +338,7 @@ export class Lily {
   }
 
   destroy(): void {
+    this.destroyedFlag = true;
     this.cancelFly?.();
     this.cancelAlpha?.();
     Ticker.shared.remove(this.tickFn);
