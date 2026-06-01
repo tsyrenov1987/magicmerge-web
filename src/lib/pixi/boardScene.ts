@@ -19,6 +19,7 @@ import {
   spawnComboBanner,
   spawnChainBanner,
   spawnJackpotBanner,
+  spawnLightningBolt,
 } from "./effects";
 import { isGenerator, type BoardItem } from "$lib/game/boardItem";
 import type { LineId } from "$lib/game/lines";
@@ -601,14 +602,19 @@ export class BoardScene {
     }
   }
 
-  /** Play a sparkle trail for a chain step's path. */
+  /**
+   * Play a lightning-bolt trail along a chain step's path, plus a small
+   * sparkle pop at the midpoint. The bolt visualizes the cascade route
+   * better than the old simple-sparkle midpoint trail.
+   */
   playChainTrail(fromIdx: number, toIdx: number, line?: LineId): void {
     const from = this.slots[fromIdx];
     const to = this.slots[toIdx];
     if (!from || !to) return;
+    spawnLightningBolt(this.effectsLayer, from.cx, from.cy, to.cx, to.cy);
     const midX = (from.cx + to.cx) / 2;
     const midY = (from.cy + to.cy) / 2;
-    spawnSparkleBurst(this.effectsLayer, midX, midY, 6, line, 50);
+    spawnSparkleBurst(this.effectsLayer, midX, midY, 5, line, 40);
   }
 
   /** Brief celebration on a newly-spawned item. */
