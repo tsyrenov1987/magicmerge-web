@@ -34,7 +34,7 @@ interface TweenSpec {
 /** True iff the user has prefers-reduced-motion: reduce.
  *  Re-evaluated lazily each tween so toggling the OS setting takes
  *  effect on the next interaction without a reload. */
-function reducedMotion(): boolean {
+export function reducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

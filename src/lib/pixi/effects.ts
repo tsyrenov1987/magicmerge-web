@@ -6,7 +6,7 @@
  */
 
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
-import { tweenTo, tweenAlpha, tweenScale, runTween, ease } from "./tween";
+import { tweenTo, tweenAlpha, tweenScale, runTween, ease, reducedMotion } from "./tween";
 import { LINES, type LineId } from "$lib/game/lines";
 
 const COIN_GOLD = 0xffd96b;
@@ -27,6 +27,10 @@ export function spawnSparkleBurst(
   lineId?: LineId,
   spread: number = 90
 ): void {
+  // Reduce-motion: skip the burst entirely — the tier ring and the score
+  // popup carry the "something happened here" signal without flicker.
+  if (reducedMotion()) return;
+
   const palette = lineId ? LINES[lineId].palette : undefined;
   const colors = palette
     ? [palette.primary, palette.secondary, palette.accent, COIN_GOLD]
@@ -61,6 +65,22 @@ export function spawnSparkleBurst(
  * "something just happened here" without obscuring the new sprite.
  */
 export function spawnTierRing(layer: Container, x: number, y: number, color: number = TIER_RING_COLOR): void {
+  if (reducedMotion()) {
+    // Static dot — visible feedback without an expanding animation
+    const dot = new Graphics();
+    dot.circle(0, 0, 18).stroke({ color, width: 4, alpha: 0.9 });
+    dot.x = x;
+    dot.y = y;
+    layer.addChild(dot);
+    setTimeout(() => {
+      if (!dot.destroyed) {
+        layer.removeChild(dot);
+        dot.destroy();
+      }
+    }, 400);
+    return;
+  }
+
   const ring = new Graphics();
   ring.circle(0, 0, 12).stroke({ color, width: 4, alpha: 1 });
   ring.x = x;
@@ -118,6 +138,18 @@ export function spawnScorePopup(
   label.x = x;
   label.y = y;
   layer.addChild(label);
+
+  // Reduce-motion: show static label for ~1.1s then destroy. No tween, no
+  // scale pulse, no vertical drift — but the player still SEES "+19 🪙".
+  if (reducedMotion()) {
+    setTimeout(() => {
+      if (!label.destroyed) {
+        layer.removeChild(label);
+        label.destroy();
+      }
+    }, 1100);
+    return;
+  }
 
   const startY = y;
   const endY = y - 48;
