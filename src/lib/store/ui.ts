@@ -11,19 +11,20 @@
 
 import { writable } from "svelte/store";
 
-export type UiView = "landing" | "game";
+export type UiView = "landing" | "game" | "garden";
 
 const STORAGE_KEY = "magicmerge.ui.view";
 
 function initialView(): UiView {
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "landing" || saved === "game") return saved;
+    if (saved === "landing" || saved === "game" || saved === "garden") return saved;
   }
-  // URL escape hatch (kept from 1.B) so dev links still work
   if (typeof window !== "undefined") {
     const url = new URL(window.location.href);
+    if (url.searchParams.get("garden") === "1") return "garden";
     if (url.searchParams.get("game") === "1") return "game";
+    if (window.location.hash === "#garden") return "garden";
     if (window.location.hash === "#game") return "game";
   }
   return "landing";
