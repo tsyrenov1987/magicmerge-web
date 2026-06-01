@@ -139,6 +139,16 @@
       const isJackpot = outcome.jackpot === true;
       const chainDepth = outcome.chainSteps?.length ?? 0;
       const combo = outcome.combo ?? 1;
+      const coins = outcome.coins ?? 0;
+      const line = outcome.line;
+
+      // Sparkle trail for each chain step happens just before the rebuild
+      // wipes the in-flight sprites, so the player sees the path light up.
+      if (outcome.chainSteps) {
+        for (const step of outcome.chainSteps) {
+          scene?.playChainTrail(step.fromIdx, step.toIdx, line);
+        }
+      }
 
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
         const withBonus = masteredLine
@@ -147,6 +157,17 @@
         gameState.set(withBonus);
         hapticNotify("success");
         if (mergeSpot) lily?.celebrate(mergeSpot.x, mergeSpot.y);
+        // Coloured sparkle burst + score popup + optional combo / chain
+        // banner. Fires AFTER rebuild so the effect lands on the new sprite.
+        scene?.playMergeEffects({
+          slotIdx: outcome.to,
+          line,
+          coinsText: coins > 0 ? `+${coins} 🪙` : undefined,
+          combo,
+          chainDepth,
+          jackpot: isJackpot,
+          jackpotCoins: isJackpot ? coins : undefined,
+        });
         // Prioritized dialogue: jackpot > chain > combo > praise
         if (isJackpot) say("jackpot");
         else if (chainDepth >= 2) say("chain");

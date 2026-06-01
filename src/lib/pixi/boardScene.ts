@@ -12,7 +12,16 @@
 import { Container, Graphics, FederatedPointerEvent } from "pixi.js";
 import { createItemSprite } from "./itemSprite";
 import { tweenTo, tweenAlpha, squashPulse, ease } from "./tween";
+import {
+  spawnSparkleBurst,
+  spawnTierRing,
+  spawnScorePopup,
+  spawnComboBanner,
+  spawnChainBanner,
+  spawnJackpotBanner,
+} from "./effects";
 import { isGenerator, type BoardItem } from "$lib/game/boardItem";
+import type { LineId } from "$lib/game/lines";
 import { onTextureLoaded } from "$lib/assets/loader";
 
 export interface BoardSceneOptions {
@@ -53,6 +62,7 @@ export class BoardScene {
   private cellsLayer: Container;
   private itemsLayer: Container;
   private dragLayer: Container;
+  private effectsLayer!: Container;
   private cellSize = 0;
   private boardCols = 0;
   private boardCellCount = 0;
@@ -107,10 +117,14 @@ export class BoardScene {
     this.itemsLayer.label = "board:items";
     this.dragLayer = new Container();
     this.dragLayer.label = "board:drag";
+    this.effectsLayer = new Container();
+    this.effectsLayer.label = "board:effects";
+    this.effectsLayer.eventMode = "none";
 
     this.root.addChild(this.cellsLayer);
     this.root.addChild(this.itemsLayer);
     this.root.addChild(this.dragLayer);
+    this.root.addChild(this.effectsLayer);
 
     this.parent.eventMode = "static";
     this.parent.on("globalpointermove", this.handlePointerMove);
@@ -530,6 +544,51 @@ export class BoardScene {
       x: this.root.x + slot.cx,
       y: this.root.y + slot.cy,
     };
+  }
+
+  /** Play merge effects at a board slot: tier ring + sparkles + score popup. */
+  playMergeEffects(opts: {
+    slotIdx: number;
+    line?: LineId;
+    coinsText?: string;
+    combo?: number;
+    chainDepth?: number;
+    jackpot?: boolean;
+    jackpotCoins?: number;
+  }): void {
+    const slot = this.slots[opts.slotIdx];
+    if (!slot) return;
+    const x = slot.cx;
+    const y = slot.cy;
+
+    if (opts.jackpot) {
+      spawnJackpotBanner(this.effectsLayer, x, y, opts.jackpotCoins ?? 0);
+      spawnSparkleBurst(this.effectsLayer, x, y, 26, undefined, 140);
+      spawnTierRing(this.effectsLayer, x, y, 0xffd24a);
+      return;
+    }
+
+    spawnTierRing(this.effectsLayer, x, y);
+    spawnSparkleBurst(this.effectsLayer, x, y, 12, opts.line, 80);
+
+    if (opts.coinsText) {
+      spawnScorePopup(this.effectsLayer, x, y - 4, opts.coinsText);
+    }
+    if (opts.chainDepth && opts.chainDepth >= 2) {
+      spawnChainBanner(this.effectsLayer, x, y, opts.chainDepth);
+    } else if (opts.combo && opts.combo >= 3) {
+      spawnComboBanner(this.effectsLayer, x, y, opts.combo);
+    }
+  }
+
+  /** Play a sparkle trail for a chain step's path. */
+  playChainTrail(fromIdx: number, toIdx: number, line?: LineId): void {
+    const from = this.slots[fromIdx];
+    const to = this.slots[toIdx];
+    if (!from || !to) return;
+    const midX = (from.cx + to.cx) / 2;
+    const midY = (from.cy + to.cy) / 2;
+    spawnSparkleBurst(this.effectsLayer, midX, midY, 6, line, 50);
   }
 
   /** Brief celebration on a newly-spawned item. */
