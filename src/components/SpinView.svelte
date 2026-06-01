@@ -231,7 +231,9 @@
     height: 100vh;
     height: 100dvh;
     background:
-      radial-gradient(circle at 50% 30%, rgba(232, 164, 242, 0.12), transparent 60%),
+      radial-gradient(circle at 50% 30%, rgba(232, 164, 242, 0.18), transparent 60%),
+      linear-gradient(180deg, rgba(31, 23, 51, 0.82) 0%, rgba(26, 20, 36, 0.94) 100%),
+      url("/assets/misc/game_bg_night.webp") center / cover no-repeat,
       linear-gradient(180deg, #1f1733 0%, #2B1B3D 60%, #1A1424 100%);
     color: #fff;
     touch-action: pan-y;

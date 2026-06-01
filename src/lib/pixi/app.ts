@@ -14,8 +14,9 @@ export async function getPixiApp(target: HTMLDivElement): Promise<Application> {
   if (app) return app;
 
   const opts: Partial<ApplicationOptions> = {
-    background: "#1A1424",
-    backgroundAlpha: 1,
+    // Transparent canvas — lets the CSS background (game_bg_night.webp)
+    // show through behind the board cells and items.
+    backgroundAlpha: 0,
     antialias: true,
     autoDensity: true,
     resolution: Math.min(window.devicePixelRatio, 2), // cap at 2x for bundle/perf

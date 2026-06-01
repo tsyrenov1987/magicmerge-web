@@ -273,7 +273,10 @@
     width: 100%;
     height: 100vh;
     height: 100dvh;
-    background: linear-gradient(180deg, #1f1733 0%, #2B1B3D 60%, #1A1424 100%);
+    background:
+      linear-gradient(180deg, rgba(31, 23, 51, 0.78) 0%, rgba(26, 20, 36, 0.92) 100%),
+      url("/assets/misc/game_bg_dawn.webp") center / cover no-repeat,
+      linear-gradient(180deg, #1f1733 0%, #2B1B3D 60%, #1A1424 100%);
     color: #fff;
     touch-action: pan-y;
     user-select: none;

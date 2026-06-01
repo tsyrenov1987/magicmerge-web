@@ -2,6 +2,7 @@
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
   import { setView } from "$lib/store/ui";
   import { shareInvite } from "$lib/telegram";
+  import { BG_NIGHT } from "$lib/assets/manifest";
   import AboutModal from "$components/AboutModal.svelte";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();

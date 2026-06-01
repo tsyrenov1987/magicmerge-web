@@ -54,7 +54,10 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: linear-gradient(180deg, #1A1424 0%, #2B1B3D 100%);
+    background:
+      linear-gradient(180deg, rgba(26, 20, 36, 0.62) 0%, rgba(43, 27, 61, 0.85) 100%),
+      url("/assets/misc/game_bg_night.webp") center / cover no-repeat,
+      linear-gradient(180deg, #1A1424 0%, #2B1B3D 100%);
     color: #fff;
   }
 </style>
