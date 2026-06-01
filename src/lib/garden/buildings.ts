@@ -21,6 +21,29 @@ export type BuildingId =
 
 export type ArtifactId = "seed" | "pixie_dust" | "crystal" | "phoenix_feather";
 
+/** All artifact ids, fixed order for consistent UI rendering. */
+export const ARTIFACT_IDS: ArtifactId[] = ["seed", "pixie_dust", "crystal", "phoenix_feather"];
+
+/** Emoji icon for an artifact (matches iOS Artifact.icon). */
+export function artifactEmoji(id: ArtifactId): string {
+  switch (id) {
+    case "seed": return "🌰";
+    case "pixie_dust": return "✨";
+    case "crystal": return "💎";
+    case "phoenix_feather": return "🪶";
+  }
+}
+
+/** Localized display name [ru, en, es]. */
+export function artifactName(id: ArtifactId): [string, string, string] {
+  switch (id) {
+    case "seed": return ["Семя", "Seed", "Semilla"];
+    case "pixie_dust": return ["Пыльца", "Pixie Dust", "Polvo de hada"];
+    case "crystal": return ["Кристалл", "Crystal", "Cristal"];
+    case "phoenix_feather": return ["Перо феникса", "Phoenix Feather", "Pluma de fénix"];
+  }
+}
+
 export interface BuildingDef {
   id: BuildingId;
   emoji: string;

@@ -4,7 +4,7 @@
   import { fly, fade } from "svelte/transition";
   import { gameState } from "$lib/store/game";
   import { gardenState, applyBuild, applyCollect, applyGardenTick } from "$lib/store/garden";
-  import { BUILDINGS, BUILDING_IDS, meetsArtifactReqs, type BuildingId, type BuildingDef } from "$lib/garden/buildings";
+  import { BUILDINGS, BUILDING_IDS, meetsArtifactReqs, ARTIFACT_IDS, artifactEmoji, artifactName, type BuildingId, type BuildingDef } from "$lib/garden/buildings";
   import { buildingSpriteUrl } from "$lib/assets/manifest";
   import { locale, tt } from "$lib/i18n";
   import { haptic, hapticNotify } from "$lib/telegram";
@@ -21,7 +21,6 @@
   const labelBuild = $derived(tt($locale, "Строить", "Build", "Construir"));
   const labelCollect = $derived(tt($locale, "Собрать", "Collect", "Recoger"));
   const labelReady = $derived(tt($locale, "Готово!", "Ready!", "¡Listo!"));
-  const labelLocked = $derived(tt($locale, "Нужны артефакты", "Artifacts needed", "Faltan artefactos"));
   const msgNoCoins = $derived(tt($locale, "Не хватает монет", "Not enough coins", "Faltan monedas"));
   const titlePicker = $derived(tt($locale, "Что построить?", "Build what?", "¿Qué construir?"));
   const close = $derived(tt($locale, "Закрыть", "Close", "Cerrar"));
@@ -132,6 +131,22 @@
     </div>
   </header>
 
+  <div class="artifacts" role="list" aria-label="Artifacts">
+    {#each ARTIFACT_IDS as id (id)}
+      {@const count = $gardenState.artifacts[id] ?? 0}
+      {@const name = artifactName(id)}
+      <div
+        class="artifact-chip"
+        class:empty={count === 0}
+        role="listitem"
+        title={tt($locale, name[0], name[1], name[2])}
+      >
+        <span class="artifact-emoji" aria-hidden="true">{artifactEmoji(id)}</span>
+        <span class="artifact-count">{count}</span>
+      </div>
+    {/each}
+  </div>
+
   <div class="grid-host" style="--grid: {$gardenState.gridSize};">
     <div class="grid">
       {#each $gardenState.plots as plot, idx (idx)}
@@ -215,7 +230,15 @@
             <span class="b-meta">
               <span class="b-cost" class:cant={!canAfford}>{def.coinCost} 🪙</span>
               {#if locked}
-                <span class="b-locked">🔒 {labelLocked}</span>
+                <span class="b-reqs">
+                  {#each Object.entries(def.artifactReqs) as [artId, need] (artId)}
+                    {@const have = $gardenState.artifacts[artId as keyof typeof $gardenState.artifacts] ?? 0}
+                    <span class="b-req" class:met={have >= (need ?? 0)}>
+                      {artifactEmoji(artId as Parameters<typeof artifactEmoji>[0])}
+                      {have}/{need}
+                    </span>
+                  {/each}
+                </span>
               {/if}
             </span>
           </button>
@@ -268,6 +291,36 @@
   }
   .coins-value {
     font-size: 15px;
+  }
+  .artifacts {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px 4px;
+  }
+  .artifact-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 56px;
+    justify-content: center;
+    transition: opacity 0.15s ease;
+  }
+  .artifact-chip.empty {
+    opacity: 0.42;
+  }
+  .artifact-emoji {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .artifact-count {
+    font-variant-numeric: tabular-nums;
   }
   .grid-host {
     flex: 1;
@@ -465,5 +518,21 @@
     font-size: 10px;
     opacity: 0.75;
     letter-spacing: 0.3px;
+  }
+  .b-reqs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+  }
+  .b-req {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+  .b-req.met {
+    opacity: 1;
+    color: #ffd96b;
   }
 </style>
