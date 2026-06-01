@@ -37,6 +37,10 @@ export interface GameUiState {
   };
   /** Lines the player has mastered (reached L8 in). Bonuses apply forever. */
   masteredLines?: LineId[];
+  /** Current chain combo count — resets when window elapses without a merge */
+  comboCount?: number;
+  /** Timestamp of last merge, for combo window check */
+  lastMergeMs?: number;
   /** Highest item tier reached this prestige cycle. Resets on prestige. */
   highestTierThisRun?: number;
   /** Stardust accumulated across all prestige resets. Spent on permanent upgrades. */

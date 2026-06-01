@@ -15,7 +15,9 @@ import {
   MASTERY_LEVEL,
   ARTIFACT_MIN_LEVEL,
   ARTIFACT_BASE_CHANCE,
+  COMBO_WINDOW_MS,
   artifactFor,
+  comboMultiplier,
 } from "./logic";
 import {
   makeItem,
@@ -34,8 +36,15 @@ export type DropOutcome =
       from: number;
       to: number;
       newLevel: number;
+      /** Base coin value before combo multiplier */
+      baseCoins: number;
+      /** Coin reward including combo multiplier */
       coins: number;
       line: LineId;
+      /** Current combo count after this merge (1 for fresh chain) */
+      combo: number;
+      /** Multiplier applied (1.0 = no bonus) */
+      multiplier: number;
       /** Artifact dropped by this merge (L5+ items only), if any */
       artifact?: ArtifactId;
       /** True iff THIS merge mastered the line (first L8 in this line) */
@@ -117,6 +126,38 @@ export function applyDrop(
     };
   }
 
+  // Case: two Lucky Chests merge → jackpot (550 coins + 1 hammer booster).
+  // iOS routes this through onLuckyMerge instead of canMerge; we use a
+  // dedicated "merge" outcome with a sentinel artifact field so the UI
+  // can flash a special celebration without complicating the type.
+  if (source.isLuckyChest && target.isLuckyChest) {
+    const jackpotCoins = 550;
+    writeCell(board, inventory, fromIdx, null);
+    writeCell(board, inventory, toIdx, null); // jackpot consumes both, no item left
+    const boosters = { ...(state.boosters ?? {}) };
+    boosters.hammer = (boosters.hammer ?? 0) + 1;
+    return {
+      next: {
+        ...state,
+        board,
+        inventory,
+        coins: state.coins + jackpotCoins,
+        boosters,
+      },
+      outcome: {
+        kind: "merge",
+        from: fromIdx,
+        to: toIdx,
+        newLevel: 1,
+        baseCoins: jackpotCoins,
+        coins: jackpotCoins,
+        line: "roses", // dummy; UI checks the lucky path via custom flag
+        combo: 1,
+        multiplier: 1,
+      },
+    };
+  }
+
   // Case: same line + level + below cap → merge
   if (canMerge(source, target)) {
     const newLevel = target.level + 1;
@@ -128,7 +169,19 @@ export function applyDrop(
     writeCell(board, inventory, fromIdx, null);
     writeCell(board, inventory, toIdx, merged);
 
-    const coins = calculateSellPrice(newLevel);
+    const baseCoins = calculateSellPrice(newLevel);
+
+    // Combo tracking — port of iOS GameViewModel combo logic.
+    // Within COMBO_WINDOW_MS of the previous merge → continue chain;
+    // otherwise start a new chain at 1.
+    const now = Date.now();
+    const prevCombo = state.comboCount ?? 0;
+    const prevMergeMs = state.lastMergeMs ?? 0;
+    const combo = (now - prevMergeMs < COMBO_WINDOW_MS && prevCombo > 0)
+      ? prevCombo + 1
+      : 1;
+    const multiplier = comboMultiplier(combo);
+    const coins = Math.round(baseCoins * multiplier);
 
     // L5+ merges roll for an artifact (port of iOS maybeDropArtifact).
     let artifact: ArtifactId | undefined;
@@ -153,14 +206,19 @@ export function applyDrop(
         coins: state.coins + coins,
         masteredLines: nextMastered,
         highestTierThisRun: newHighest,
+        comboCount: combo,
+        lastMergeMs: now,
       },
       outcome: {
         kind: "merge",
         from: fromIdx,
         to: toIdx,
         newLevel,
+        baseCoins,
         coins,
         line,
+        combo,
+        multiplier,
         artifact,
         newlyMastered: newlyMastered || undefined,
       },
@@ -291,17 +349,27 @@ function freeSlotNear(boardIdx: number, state: GameUiState): number {
  * ENERGY_REGEN_MS interval has elapsed.
  */
 export function applyEnergyTick(state: GameUiState, now: number = Date.now()): GameUiState {
-  if (state.energy >= state.energyMax) return state;
+  // Combo decay — port of iOS lastMergeTimeMs check. If player paused
+  // longer than COMBO_WINDOW_MS, reset the chain.
+  let withDecay = state;
+  if ((state.comboCount ?? 0) > 0) {
+    const last = state.lastMergeMs ?? 0;
+    if (now - last > COMBO_WINDOW_MS) {
+      withDecay = { ...state, comboCount: 0 };
+    }
+  }
+
+  if (withDecay.energy >= withDecay.energyMax) return withDecay;
   // Stardust upgrade: each tier shortens the regen interval by 10%
-  const regenTier = state.upgrades?.regenSpeedBoost ?? 0;
+  const regenTier = withDecay.upgrades?.regenSpeedBoost ?? 0;
   const effectiveInterval = ENERGY_REGEN_MS * Math.pow(0.9, regenTier);
-  const elapsed = now - state.lastEnergyTimeMs;
-  if (elapsed < effectiveInterval) return state;
+  const elapsed = now - withDecay.lastEnergyTimeMs;
+  if (elapsed < effectiveInterval) return withDecay;
   const ticks = Math.floor(elapsed / effectiveInterval);
-  const newEnergy = Math.min(state.energyMax, state.energy + ticks);
-  const newLastEnergyTimeMs = state.lastEnergyTimeMs + ticks * effectiveInterval;
+  const newEnergy = Math.min(withDecay.energyMax, withDecay.energy + ticks);
+  const newLastEnergyTimeMs = withDecay.lastEnergyTimeMs + ticks * effectiveInterval;
   return {
-    ...state,
+    ...withDecay,
     energy: newEnergy,
     lastEnergyTimeMs: newLastEnergyTimeMs,
   };

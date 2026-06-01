@@ -61,9 +61,11 @@
   const labelEnergy = $derived(tt($locale, "Энергия", "Energy", "Energía"));
   const labelMastery = $derived(tt($locale, "Мастерство", "Mastery", "Maestría"));
   const labelPrestige = $derived(tt($locale, "Перерождение", "Prestige", "Renacer"));
+  const labelCombo = $derived(tt($locale, "Комбо", "Combo", "Combo"));
   const masteryCount = $derived($gameState.masteredLines?.length ?? 0);
   const stardust = $derived($gameState.stardust ?? 0);
   const prestigeReady = $derived(($gameState.highestTierThisRun ?? 1) >= MAX_LEVEL);
+  const combo = $derived($gameState.comboCount ?? 0);
 
   let prestigeOpen = $state(false);
   let shopOpen = $state(false);
@@ -417,6 +419,12 @@
       <span class="stat-label">{labelEnergy}</span>
       <span class="stat-value">{$gameState.energy} / {$gameState.energyMax}</span>
     </div>
+    {#if combo > 1}
+      <div class="stat combo" title={labelCombo}>
+        <span class="stat-label">⚡</span>
+        <span class="stat-value">×{combo}</span>
+      </div>
+    {/if}
     {#if masteryCount > 0}
       <div class="stat mastery" title={labelMastery}>
         <span class="stat-label">🏆</span>
@@ -496,6 +504,14 @@
   .mastery .stat-value {
     color: #ffd96b;
     font-variant-numeric: tabular-nums;
+  }
+  .combo .stat-value {
+    color: #ff8542;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+  .combo .stat-label {
+    color: #ff8542;
   }
   .prestige {
     background: rgba(176, 104, 223, 0.12);

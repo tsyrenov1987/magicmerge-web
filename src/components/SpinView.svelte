@@ -51,7 +51,9 @@
     gameState.update((g) => {
       let next = { ...g };
       if (prize.coins) next.coins = g.coins + prize.coins;
-      if (prize.energy) next.energy = Math.min(g.energyMax + prize.energy, g.energy + prize.energy);
+      // Energy packs can over-cap — matches iOS behavior. The natural regen
+      // tick won't refill beyond max, but bought / earned energy persists.
+      if (prize.energy) next.energy = g.energy + prize.energy;
       if (prize.booster) {
         const b = { ...(g.boosters ?? {}) };
         const k = prize.booster.type;
