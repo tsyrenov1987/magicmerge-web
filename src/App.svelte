@@ -1,17 +1,34 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import GameCanvas from "$components/GameCanvas.svelte";
   import ComingSoon from "$components/ComingSoon.svelte";
   import GardenView from "$components/GardenView.svelte";
   import SpinView from "$components/SpinView.svelte";
   import StoryPanel from "$components/StoryPanel.svelte";
   import { initFirebase } from "$lib/firebase";
-  import { tgUser, isInTelegram } from "$lib/telegram";
-  import { uiView } from "$lib/store/ui";
+  import { tgUser, isInTelegram, bindBackButton } from "$lib/telegram";
+  import { uiView, setView } from "$lib/store/ui";
 
   initFirebase();
 
   const user = tgUser();
   const inTg = isInTelegram();
+
+  // TG native BackButton: when not on landing, show it; tapping returns
+  // to landing. Outside TG this is a no-op (the in-app back chip handles it).
+  let unbindBack: (() => void) | null = null;
+
+  $effect(() => {
+    unbindBack?.();
+    unbindBack = null;
+    if ($uiView !== "landing") {
+      unbindBack = bindBackButton(() => setView("landing"));
+    }
+  });
+
+  onDestroy(() => {
+    unbindBack?.();
+  });
 </script>
 
 {#if $uiView === "game"}

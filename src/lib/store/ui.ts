@@ -15,12 +15,18 @@ export type UiView = "landing" | "game" | "garden" | "spin";
 
 const STORAGE_KEY = "magicmerge.ui.view";
 
-function isUiView(v: string | null): v is UiView {
+function isUiView(v: string | null | undefined): v is UiView {
   return v === "landing" || v === "game" || v === "garden" || v === "spin";
 }
 
 function initialView(): UiView {
+  // TG deep link wins: opening t.me/bot/play?startapp=garden lands directly
+  // in the garden tab, bypassing the saved view.
   if (typeof window !== "undefined") {
+    const tgWebApp = window.Telegram?.WebApp;
+    const startParam = tgWebApp?.initDataUnsafe?.start_param;
+    if (isUiView(startParam)) return startParam;
+
     const url = new URL(window.location.href);
     const q = url.searchParams.get("view");
     if (isUiView(q)) return q;

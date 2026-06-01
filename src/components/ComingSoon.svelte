@@ -1,6 +1,7 @@
 <script lang="ts">
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
   import { setView } from "$lib/store/ui";
+  import { shareInvite } from "$lib/telegram";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
 
@@ -57,6 +58,27 @@
   function openPreview() {
     setView("game");
   }
+
+  const labelShare = $derived(
+    tt(
+      $locale,
+      "Поделиться с друзьями",
+      "Share with friends",
+      "Compartir con amigos"
+    )
+  );
+  const shareText = $derived(
+    tt(
+      $locale,
+      "🧚 Magic Merge — уютная игра-слияние с феей Лили",
+      "🧚 Magic Merge — a cozy merge puzzle with Lily the fairy",
+      "🧚 Magic Merge — un puzzle de fusiones acogedor con el hada Lily"
+    )
+  );
+
+  function onShare() {
+    void shareInvite(shareText, "game");
+  }
 </script>
 
 <div class="card">
@@ -96,6 +118,12 @@
     </button>
     <p class="preview-note">{previewNote}</p>
   </div>
+
+  {#if inTg}
+    <button type="button" class="share-btn" onclick={onShare}>
+      ↗ {labelShare}
+    </button>
+  {/if}
 
   {#if !inTg}
     <p class="dev-note">Running outside Telegram (dev mode)</p>
@@ -196,6 +224,22 @@
     font-size: 12px;
     opacity: 0.5;
     font-style: italic;
+  }
+  .share-btn {
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 22px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: background 0.15s ease;
+  }
+  .share-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
   }
   .dev-note {
     margin-top: 24px;
