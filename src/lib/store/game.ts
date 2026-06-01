@@ -255,6 +255,25 @@ export function applyPurchase(
   return { next: state, outcome: { kind: "unknown-item" } };
 }
 
+/**
+ * Apply a Stars-paid award by productId. No price deduction here — TG
+ * already charged Stars on its side. Returns the new state.
+ */
+export function applyStarsAward(state: GameUiState, productId: string): GameUiState {
+  switch (productId) {
+    case "stars_coins_pouch":
+      return { ...state, coins: state.coins + 1000 };
+    case "stars_coins_chest":
+      return { ...state, coins: state.coins + 5000 };
+    case "stars_stardust":
+      return { ...state, stardust: (state.stardust ?? 0) + 3 };
+    case "stars_energy_mega":
+      return { ...state, energy: state.energy + 500 };
+    default:
+      return state;
+  }
+}
+
 export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {
   switch (line) {
     case "forge":

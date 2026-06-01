@@ -20,9 +20,13 @@ export type ShopItemId =
   | "energy_refill_small"
   | "energy_refill_large"
   | "upgrade_energy_max"
-  | "upgrade_regen_speed";
+  | "upgrade_regen_speed"
+  | "stars_coins_pouch"
+  | "stars_coins_chest"
+  | "stars_stardust"
+  | "stars_energy_mega";
 
-export type ShopSection = "boosters" | "energy" | "upgrades";
+export type ShopSection = "boosters" | "energy" | "upgrades" | "premium";
 
 export interface ShopItem {
   id: ShopItemId;
@@ -34,13 +38,18 @@ export interface ShopItem {
   name: [string, string, string];
   /** Localized one-line description [ru, en, es] */
   description: [string, string, string];
-  /** Either coin cost or stardust cost — exactly one is set */
+  /** Either coin cost, stardust cost, or stars cost — exactly one is set */
   coinCost?: number;
   stardustCost?: number;
+  starsCost?: number;
   /** For booster items: which booster and how many */
   award?: { booster: BoosterType; amount: number };
-  /** For energy refills */
+  /** For energy refills + premium energy */
   energyAmount?: number;
+  /** For premium coin packs */
+  coinsAmount?: number;
+  /** For premium stardust packs */
+  stardustAmount?: number;
   /** For upgrades: max stack count (player can buy this many times total) */
   maxTier?: number;
   /** Accent color for the tile */
@@ -139,6 +148,51 @@ export const SHOP_ITEMS: ShopItem[] = [
     description: ["Можно купить до 4 раз", "Up to 4 stacks", "Hasta 4 acumulables"],
     stardustCost: 1,
     maxTier: 4,
+    accent: 0x6bd6e8,
+  },
+
+  // --- Premium (Telegram Stars) ---
+  {
+    id: "stars_coins_pouch",
+    section: "premium",
+    emoji: "💰",
+    assetUrl: spinPrizeUrl("coins_med"),
+    name: ["Кошелёк монет", "Pouch of Coins", "Bolsa de monedas"],
+    description: ["+1000 монет", "+1000 coins", "+1000 monedas"],
+    starsCost: 75,
+    coinsAmount: 1000,
+    accent: 0xffd96b,
+  },
+  {
+    id: "stars_coins_chest",
+    section: "premium",
+    emoji: "🏆",
+    assetUrl: spinPrizeUrl("coins_large"),
+    name: ["Сундук монет", "Chest of Coins", "Cofre de monedas"],
+    description: ["+5000 монет", "+5000 coins", "+5000 monedas"],
+    starsCost: 350,
+    coinsAmount: 5000,
+    accent: 0xffa940,
+  },
+  {
+    id: "stars_stardust",
+    section: "premium",
+    emoji: "✨",
+    name: ["Звёздная пыль ×3", "Stardust ×3", "Polvo estelar ×3"],
+    description: ["Для улучшений в Магазине", "For Shop upgrades", "Para mejoras"],
+    starsCost: 250,
+    stardustAmount: 3,
+    accent: 0xb068df,
+  },
+  {
+    id: "stars_energy_mega",
+    section: "premium",
+    emoji: "🔋",
+    assetUrl: spinPrizeUrl("energy"),
+    name: ["Мега-энергия", "Mega Energy", "Mega energía"],
+    description: ["+500 ⚡, можно превысить максимум", "+500 ⚡, can exceed cap", "+500 ⚡, supera el tope"],
+    starsCost: 100,
+    energyAmount: 500,
     accent: 0x6bd6e8,
   },
 ];

@@ -11,6 +11,23 @@ export interface TgUpdate {
   update_id: number;
   message?: TgMessage;
   callback_query?: TgCallbackQuery;
+  pre_checkout_query?: TgPreCheckoutQuery;
+}
+
+export interface TgPreCheckoutQuery {
+  id: string;
+  from: TgUser;
+  currency: string;
+  total_amount: number;
+  invoice_payload: string;
+}
+
+export interface TgSuccessfulPayment {
+  currency: string;
+  total_amount: number;
+  invoice_payload: string;
+  telegram_payment_charge_id: string;
+  provider_payment_charge_id: string;
 }
 
 export interface TgMessage {
@@ -20,6 +37,7 @@ export interface TgMessage {
   date: number;
   text?: string;
   entities?: TgMessageEntity[];
+  successful_payment?: TgSuccessfulPayment;
 }
 
 export interface TgUser {

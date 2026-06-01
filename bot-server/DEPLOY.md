@@ -168,6 +168,45 @@ The WebApp will start scheduling notifications when:
 - **Rollback**: `wrangler deployments list` then
   `wrangler rollback <deployment-id>`.
 
+---
+
+## Telegram Stars (Phase 5)
+
+Stars payments piggyback on the same Worker — the endpoints and the
+pre_checkout_query / successful_payment handlers are already in
+`src/index.ts`. To activate Stars selling:
+
+1. **Enable payments on the bot** via `@BotFather`:
+   ```
+   /mybots → @MagicMerge1bot → Payments
+   ```
+   Select **Telegram Stars** (it's the first / default option). No
+   provider token needed for Stars — currency code is `XTR` and TG
+   handles everything.
+
+2. **No code changes required** — `bot-server/src/payments.ts`
+   already calls `createInvoiceLink` with `currency: "XTR"`. After
+   you enable Stars in BotFather and re-deploy, premium items in
+   the WebApp Shop's Premium tab will work end-to-end.
+
+3. **Test in TG**:
+   - Open Magic Merge in Telegram
+   - Shop → Premium tab → tap "⭐ 75" on Pouch of Coins
+   - TG opens its native Stars invoice sheet
+   - Confirm → coins land in your gameState immediately
+   - The Worker also records the payment in KV for the 30-day
+     restore window
+
+4. **Refund / restore policy**:
+   - The Worker stores 30 days of payment history in KV
+   - On Shop mount the WebApp polls `/api/payments/poll?userId=X`
+     so any successful payment that the client missed (e.g. closed
+     Mini App mid-checkout) is delivered next session.
+   - For refund requests, run `wrangler kv key list --binding
+     NOTIFICATIONS --prefix "payment:"` and inspect entries.
+
+---
+
 ## Limitations of Phase 4.B
 
 - One notification per kind per user — newer scheduled time

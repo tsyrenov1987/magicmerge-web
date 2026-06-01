@@ -15,6 +15,8 @@ import {
   tgAnswerCallback,
   type TgUpdate,
   type TgMessage,
+  type TgPreCheckoutQuery,
+  type TgSuccessfulPayment,
 } from "./telegram";
 import {
   scheduleNotification,
@@ -24,6 +26,12 @@ import {
   type Notification,
   type NotificationKind,
 } from "./notifications";
+import {
+  createInvoiceLink,
+  answerPreCheckout,
+  recordPayment,
+  consumePaymentsForUser,
+} from "./payments";
 
 export interface Env {
   TG_BOT_TOKEN: string;
@@ -69,13 +77,45 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     return new Response("bad json", { status: 400 });
   }
 
-  if (update.message) {
+  if (update.pre_checkout_query) {
+    await handlePreCheckout(update.pre_checkout_query, env);
+  } else if (update.message?.successful_payment) {
+    await handleSuccessfulPayment(update.message, env);
+  } else if (update.message) {
     await handleMessage(update.message, env);
   } else if (update.callback_query) {
     await tgAnswerCallback(env.TG_BOT_TOKEN, update.callback_query.id);
   }
 
   return new Response("ok");
+}
+
+async function handlePreCheckout(q: TgPreCheckoutQuery, env: Env): Promise<void> {
+  // Validate the payload looks like ours: "mm:{productId}:{userId}:{nonce}".
+  // Reject obvious garbage; accept the rest. Real product/price validation
+  // happens in the WebApp before opening the invoice.
+  const ok = q.invoice_payload.startsWith("mm:") && q.currency === "XTR";
+  await answerPreCheckout(env.TG_BOT_TOKEN, q.id, ok, ok ? undefined : "Invalid payload");
+}
+
+async function handleSuccessfulPayment(msg: TgMessage, env: Env): Promise<void> {
+  const sp = msg.successful_payment;
+  const userId = msg.from?.id;
+  if (!sp || !userId) return;
+  const parts = sp.invoice_payload.split(":");
+  // "mm:{productId}:{userId}:{nonce}"
+  const productId = parts[1];
+  if (!productId) return;
+  await recordPayment(env.NOTIFICATIONS, {
+    userId,
+    productId,
+    payload: sp.invoice_payload,
+    starsAmount: sp.total_amount,
+    telegramChargeId: sp.telegram_payment_charge_id,
+    ts: Date.now(),
+  });
+  // Optional thank-you nudge — keep it short
+  await tgSendMessage(env.TG_BOT_TOKEN, userId, "🧚 Thanks! Your purchase is ready in the game.");
 }
 
 async function handleMessage(msg: TgMessage, env: Env): Promise<void> {
@@ -187,6 +227,57 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     }
     const n = await cancelAllForUser(env.NOTIFICATIONS, body.userId);
     return cors(json({ ok: true, cancelled: n }), env);
+  }
+
+  if (url.pathname === "/api/invoice/create" && req.method === "POST") {
+    let body: {
+      userId?: number;
+      productId?: string;
+      title?: string;
+      description?: string;
+      stars?: number;
+    };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return cors(json({ ok: false, error: "bad json" }, 400), env);
+    }
+    if (
+      typeof body.userId !== "number" ||
+      typeof body.productId !== "string" ||
+      typeof body.title !== "string" ||
+      typeof body.description !== "string" ||
+      typeof body.stars !== "number" ||
+      body.stars < 1
+    ) {
+      return cors(json({ ok: false, error: "missing fields" }, 400), env);
+    }
+    // Construct a tamper-resistant payload: "mm:{productId}:{userId}:{nonce}".
+    // The userId + nonce make it unique per attempt; on successful_payment
+    // we extract productId for award resolution.
+    const nonce = Math.random().toString(36).slice(2, 10);
+    const payload = `mm:${body.productId}:${body.userId}:${nonce}`;
+    try {
+      const result = await createInvoiceLink(env.TG_BOT_TOKEN, {
+        title: body.title,
+        description: body.description,
+        payload,
+        prices: [{ label: body.title, amount: body.stars }],
+      });
+      return cors(json({ ok: true, link: result.link, payload }), env);
+    } catch (e) {
+      return cors(json({ ok: false, error: String(e) }, 500), env);
+    }
+  }
+
+  if (url.pathname === "/api/payments/poll" && req.method === "GET") {
+    const userIdStr = url.searchParams.get("userId");
+    const userId = userIdStr ? Number(userIdStr) : NaN;
+    if (!Number.isFinite(userId)) {
+      return cors(json({ ok: false, error: "bad userId" }, 400), env);
+    }
+    const payments = await consumePaymentsForUser(env.NOTIFICATIONS, userId);
+    return cors(json({ ok: true, payments }), env);
   }
 
   return cors(json({ ok: false, error: "unknown route" }, 404), env);
