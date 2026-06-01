@@ -141,6 +141,10 @@ export function applyDrop(
     const newlyMastered = newLevel === MASTERY_LEVEL && !mastered.includes(line);
     const nextMastered = newlyMastered ? [...mastered, line] : mastered;
 
+    // Track the highest tier reached this run — used to gate prestige.
+    const prevHighest = state.highestTierThisRun ?? 1;
+    const newHighest = Math.max(prevHighest, newLevel);
+
     return {
       next: {
         ...state,
@@ -148,6 +152,7 @@ export function applyDrop(
         inventory,
         coins: state.coins + coins,
         masteredLines: nextMastered,
+        highestTierThisRun: newHighest,
       },
       outcome: {
         kind: "merge",

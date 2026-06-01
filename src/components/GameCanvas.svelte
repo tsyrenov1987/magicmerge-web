@@ -20,6 +20,8 @@
   import { LINE_IDS } from "$lib/game/lines";
   import LilyBubble from "$components/LilyBubble.svelte";
   import TabBar from "$components/TabBar.svelte";
+  import PrestigeModal from "$components/PrestigeModal.svelte";
+  import { MAX_LEVEL } from "$lib/game/logic";
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
@@ -54,7 +56,12 @@
   const labelCoins = $derived(tt($locale, "Монеты", "Coins", "Monedas"));
   const labelEnergy = $derived(tt($locale, "Энергия", "Energy", "Energía"));
   const labelMastery = $derived(tt($locale, "Мастерство", "Mastery", "Maestría"));
+  const labelPrestige = $derived(tt($locale, "Перерождение", "Prestige", "Renacer"));
   const masteryCount = $derived($gameState.masteredLines?.length ?? 0);
+  const stardust = $derived($gameState.stardust ?? 0);
+  const prestigeReady = $derived(($gameState.highestTierThisRun ?? 1) >= MAX_LEVEL);
+
+  let prestigeOpen = $state(false);
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
   const confirmReset = $derived(
     tt(
@@ -383,7 +390,21 @@
         <span class="stat-value">{masteryCount}/9</span>
       </div>
     {/if}
+    {#if stardust > 0 || prestigeReady}
+      <button
+        type="button"
+        class="stat prestige"
+        class:ready={prestigeReady}
+        title={labelPrestige}
+        onclick={() => (prestigeOpen = true)}
+      >
+        <span class="stat-label">✨</span>
+        <span class="stat-value">{stardust}</span>
+      </button>
+    {/if}
   </header>
+
+  <PrestigeModal bind:open={prestigeOpen} />
 
   <div bind:this={mountTarget} class="canvas-host">
     <LilyBubble />
@@ -422,6 +443,31 @@
   .mastery .stat-value {
     color: #ffd96b;
     font-variant-numeric: tabular-nums;
+  }
+  .prestige {
+    background: rgba(176, 104, 223, 0.12);
+    border: 1px solid rgba(176, 104, 223, 0.3);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.12s ease;
+  }
+  .prestige:hover {
+    background: rgba(176, 104, 223, 0.2);
+  }
+  .prestige .stat-value {
+    color: #d8a8f5;
+    font-variant-numeric: tabular-nums;
+  }
+  .prestige.ready {
+    animation: prestige-pulse 1.6s ease-in-out infinite;
+    background: rgba(176, 104, 223, 0.3);
+    border-color: rgba(216, 168, 245, 0.7);
+  }
+  @keyframes prestige-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(176, 104, 223, 0.5); }
+    50%      { box-shadow: 0 0 16px 2px rgba(176, 104, 223, 0.6); }
   }
   .stat {
     display: flex;

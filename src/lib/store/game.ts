@@ -37,6 +37,10 @@ export interface GameUiState {
   };
   /** Lines the player has mastered (reached L8 in). Bonuses apply forever. */
   masteredLines?: LineId[];
+  /** Highest item tier reached this prestige cycle. Resets on prestige. */
+  highestTierThisRun?: number;
+  /** Stardust accumulated across all prestige resets. Spent on permanent upgrades (Phase 3.E). */
+  stardust?: number;
 }
 
 const STORAGE_KEY = "magicmerge.game";
@@ -133,6 +137,42 @@ export function resetGame(): void {
  *               is mostly cosmetic without surprise spawn yet)
  *   others    → no mechanical effect yet; lore episode + UI tracking only
  */
+/**
+ * Soft-reset the run while keeping permanent meta-progression intact.
+ *
+ * Wiped:  board (only seed generator stays), inventory, energy is
+ *         restored to current max, highestTierThisRun back to 1
+ * Kept:   coins, boosters, masteredLines, prestige cycles, stardust,
+ *         garden + artifacts (those live in a separate store)
+ * Bumped: prestige += 1, stardust += 1, boardCols += 1 (capped at
+ *         BOARD_COLS_MAX = 8)
+ *
+ * Player should be at MAX_LEVEL = 12 before calling. Caller is
+ * responsible for the confirm prompt + the first_prestige lore trigger.
+ */
+export function applyPrestige(state: GameUiState): GameUiState {
+  const newPrestige = state.prestige + 1;
+  const newCols = Math.min(8, state.boardCols + 1);
+  const cells = new Array<BoardItem | null>(newCols * newCols).fill(null);
+  // Place a single generator near the center so the new run can begin
+  const genIdx = newCols + 1;
+  cells[genIdx] = makeGenerator(1);
+
+  return {
+    ...state,
+    level: 1,
+    energy: state.energyMax,
+    lastEnergyTimeMs: Date.now(),
+    boardCols: newCols,
+    board: cells,
+    inventory: new Array(4).fill(null),
+    prestige: newPrestige,
+    stardust: (state.stardust ?? 0) + 1,
+    highestTierThisRun: 1,
+    // boosters, coins, masteredLines, energyMax — all preserved
+  };
+}
+
 export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {
   switch (line) {
     case "forge":
