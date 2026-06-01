@@ -1,6 +1,7 @@
 <script lang="ts">
   import GameCanvas from "$components/GameCanvas.svelte";
   import ComingSoon from "$components/ComingSoon.svelte";
+  import StoryPanel from "$components/StoryPanel.svelte";
   import { initFirebase } from "$lib/firebase";
   import { tgUser, isInTelegram } from "$lib/telegram";
   import { uiView } from "$lib/store/ui";
@@ -18,6 +19,9 @@
     <ComingSoon {user} {inTg} />
   </main>
 {/if}
+
+<!-- Story episodes float above any view; safe to mount at root. -->
+<StoryPanel />
 
 <style>
   main {

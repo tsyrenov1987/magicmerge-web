@@ -11,6 +11,7 @@
   import { haptic, hapticNotify, tg } from "$lib/telegram";
   import { setView } from "$lib/store/ui";
   import { say, clearDialogue } from "$lib/lily/dialogue";
+  import { trigger as triggerStory, clearSeenEpisodes } from "$lib/lily/story";
   import LilyBubble from "$components/LilyBubble.svelte";
 
   let mountTarget: HTMLDivElement;
@@ -143,6 +144,8 @@
     if (outcome.isLucky) {
       hapticNotify("success");
       flash(msgLucky);
+      // Lore beat: first rare drop. Fires once per save.
+      triggerStory("first_rare");
     }
     // Pop animation runs after the next rebuild() landed by the store subscription.
     queueMicrotask(() => scene?.playSpawnAnim(outcome.idx));
@@ -211,9 +214,10 @@
     lilyBehaviorInterval = setInterval(updateLilyBehavior, 1000);
 
     mounted = true;
-    // Greet on first mount (post-microtask so the bubble appears after
-    // the initial paint, not during it)
+    // First-mount narrative beat: greeting bubble, then the intro lore
+    // episode (only fires the first time per save).
     setTimeout(() => say("greeting"), 600);
+    setTimeout(() => triggerStory("intro"), 1800);
     return unsubscribe;
   }
 
@@ -282,6 +286,7 @@
   function handleReset() {
     if (confirm(confirmReset)) {
       resetGame();
+      clearSeenEpisodes();
     }
   }
 
