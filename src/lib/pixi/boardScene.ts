@@ -10,7 +10,7 @@
  */
 
 import { Container, Graphics, FederatedPointerEvent } from "pixi.js";
-import { createItemSprite } from "./itemSprite";
+import { createItemSprite, attachIdleAnimation } from "./itemSprite";
 import { tweenTo, tweenAlpha, squashPulse, ease } from "./tween";
 import {
   spawnSparkleBurst,
@@ -293,6 +293,9 @@ export class BoardScene {
     this.itemsLayer.addChild(sprite);
     this.spriteAt[slotIdx] = sprite;
     this.isGeneratorAt[slotIdx] = isGenerator(item);
+    // Give the sprite a gentle idle animation so the board feels alive.
+    // No-op under prefers-reduced-motion.
+    attachIdleAnimation(sprite, pos.cx, pos.cy, item);
   }
 
   // ---- pointer flow: tap vs drag ----

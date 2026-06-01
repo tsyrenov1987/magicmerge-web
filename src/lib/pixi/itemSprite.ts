@@ -16,7 +16,7 @@
  *   5. Accent dot (palette.accent)
  */
 
-import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle, Ticker } from "pixi.js";
 import type { BoardItem } from "$lib/game/boardItem";
 import { isGenerator, isLuckyChest, lineOf } from "$lib/game/boardItem";
 import { LINES, type LinePalette } from "$lib/game/lines";
@@ -26,6 +26,7 @@ import {
   LUCKY_CHEST_URL,
 } from "$lib/assets/manifest";
 import { loadTexture, textureFor } from "$lib/assets/loader";
+import { reducedMotion } from "./tween";
 
 const FALLBACK_PALETTE: LinePalette = {
   primary: 0x6b6b6b,
@@ -150,4 +151,86 @@ function tierGlyph(item: BoardItem): string {
   if (isLuckyChest(item)) return "★";
   if (isGenerator(item)) return `+${item.level}`;
   return String(item.level);
+}
+
+// ---- Idle animation (per-item bobbing + tier-aware shimmer) ----
+//
+// One shared Ticker callback iterates a Set of registered items so we
+// don't spawn 64 callbacks for an 8×8 board. Items auto-deregister when
+// their container is destroyed.
+
+interface IdleAnimItem {
+  container: Container;
+  baseY: number;
+  phase: number;        // 0..2π, per-item offset so they don't sync
+  bobAmp: number;       // px
+  bobPeriod: number;    // ms per full cycle
+}
+
+const idleItems = new Set<IdleAnimItem>();
+let elapsed = 0;
+let tickerStarted = false;
+
+function ensureIdleTicker(): void {
+  if (tickerStarted) return;
+  tickerStarted = true;
+  Ticker.shared.add((tk) => {
+    elapsed += tk.deltaMS;
+    for (const it of idleItems) {
+      if (it.container.destroyed) {
+        idleItems.delete(it);
+        continue;
+      }
+      // Skip while dragged — pointer move is authoritative for position.
+      const parentLabel = it.container.parent?.label;
+      if (parentLabel === "board:drag") continue;
+
+      const phaseT = elapsed / it.bobPeriod * Math.PI * 2 + it.phase;
+      it.container.y = it.baseY + Math.sin(phaseT) * it.bobAmp;
+    }
+  });
+}
+
+/**
+ * Register an item sprite for the idle animation loop. Call this AFTER
+ * positioning the sprite at its target slot — baseX/baseY anchor the
+ * animation around the slot center.
+ *
+ * Reduced-motion users get a no-op so items stay perfectly still.
+ */
+export function attachIdleAnimation(container: Container, _baseX: number, baseY: number, item: BoardItem): void {
+  if (reducedMotion()) return;
+  ensureIdleTicker();
+
+  const isGen = isGenerator(item);
+  const isLucky = isLuckyChest(item);
+  const tier = item.level;
+
+  // Pick amplitude + period. Lower-tier regular items bob gently; higher
+  // tier ones feel more "charged". Generators bob a little extra so the
+  // player's eye lands on them naturally. Lucky chests jitter faster to
+  // telegraph their value.
+  let bobAmp = 1.5 + Math.min(3, tier * 0.25);
+  let bobPeriod = 2200 + Math.random() * 600;
+
+  if (isGen) {
+    bobAmp = 2.5;
+    bobPeriod = 1900;
+  } else if (isLucky) {
+    bobAmp = 3.0;
+    bobPeriod = 1300;
+  }
+
+  idleItems.add({
+    container,
+    baseY,
+    phase: Math.random() * Math.PI * 2,
+    bobAmp,
+    bobPeriod,
+  });
+}
+
+/** Force-clear the registry — used in tests or when fully tearing down the canvas. */
+export function clearIdleAnimations(): void {
+  idleItems.clear();
 }
