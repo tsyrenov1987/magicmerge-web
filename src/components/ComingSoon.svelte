@@ -2,8 +2,10 @@
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
   import { setView } from "$lib/store/ui";
   import { shareInvite } from "$lib/telegram";
+  import AboutModal from "$components/AboutModal.svelte";
 
   let { user, inTg }: { user: { first_name: string; username?: string } | undefined; inTg: boolean } = $props();
+  let aboutOpen = $state(false);
 
   // Reactive: derives re-evaluate when $locale changes
   const greeting = $derived(
@@ -37,11 +39,20 @@
   const previewCta = $derived(
     tt(
       $locale,
-      "Попробовать прототип",
-      "Try the prototype",
-      "Probar el prototipo"
+      "Играть",
+      "Play",
+      "Jugar"
     )
   );
+  const labelBeta = $derived(
+    tt(
+      $locale,
+      "Открытая бета",
+      "Open beta",
+      "Beta abierta"
+    )
+  );
+  const labelAbout = $derived(tt($locale, "О игре", "About", "Acerca de"));
   const previewNote = $derived(
     tt(
       $locale,
@@ -128,7 +139,15 @@
   {#if !inTg}
     <p class="dev-note">Running outside Telegram (dev mode)</p>
   {/if}
+
+  <button type="button" class="about-btn" onclick={() => (aboutOpen = true)}>
+    ℹ {labelAbout}
+  </button>
+
+  <div class="beta-chip" aria-label={labelBeta}>{labelBeta}</div>
 </div>
+
+<AboutModal bind:open={aboutOpen} />
 
 <style>
   .card {
@@ -240,6 +259,35 @@
   }
   .share-btn:hover {
     background: rgba(255, 255, 255, 0.12);
+  }
+  .about-btn {
+    margin-top: 16px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+  }
+  .about-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
+  }
+  .beta-chip {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 12px;
+    background: rgba(176, 104, 223, 0.18);
+    border: 1px solid rgba(176, 104, 223, 0.4);
+    color: #d8a8f5;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
   }
   .dev-note {
     margin-top: 24px;

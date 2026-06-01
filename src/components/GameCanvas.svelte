@@ -483,9 +483,10 @@
         class="stat prestige"
         class:ready={prestigeReady}
         title={labelPrestige}
+        aria-label={labelPrestige}
         onclick={() => (prestigeOpen = true)}
       >
-        <span class="stat-label">✨</span>
+        <span class="stat-label" aria-hidden="true">✨</span>
         <span class="stat-value">{stardust}</span>
       </button>
     {/if}
@@ -493,18 +494,20 @@
       type="button"
       class="stat shop-btn"
       title={labelShop}
+      aria-label={labelShop}
       onclick={() => (shopOpen = true)}
     >
-      <span class="stat-label">🛒</span>
+      <span class="stat-label" aria-hidden="true">🛒</span>
     </button>
     {#if seenCount > 0}
       <button
         type="button"
         class="stat log-btn"
         title={labelStoryLog}
+        aria-label={labelStoryLog}
         onclick={() => (storyLogOpen = true)}
       >
-        <span class="stat-label">📖</span>
+        <span class="stat-label" aria-hidden="true">📖</span>
       </button>
     {/if}
     {#if $currentUser}
@@ -512,9 +515,10 @@
         type="button"
         class="stat leaderboard-btn"
         title={labelLeaderboard}
+        aria-label={labelLeaderboard}
         onclick={() => (leaderboardOpen = true)}
       >
-        <span class="stat-label">🏅</span>
+        <span class="stat-label" aria-hidden="true">🏅</span>
       </button>
     {/if}
   </header>

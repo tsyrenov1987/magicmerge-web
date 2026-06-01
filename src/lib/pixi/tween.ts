@@ -31,12 +31,29 @@ interface TweenSpec {
   onComplete?: () => void;
 }
 
+/** True iff the user has prefers-reduced-motion: reduce.
+ *  Re-evaluated lazily each tween so toggling the OS setting takes
+ *  effect on the next interaction without a reload. */
+function reducedMotion(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /**
  * Run a 0→1 tween over `duration` ms, calling onUpdate every frame and
  * onComplete at the end. Returns a `cancel()` you can call to abort
  * (e.g. component teardown).
  */
 export function runTween(spec: TweenSpec): () => void {
+  // Reduced-motion: collapse every tween to its end state immediately,
+  // skip the per-frame animation. Position-style helpers still land at
+  // the right place; physics-style helpers stay readable.
+  if (reducedMotion()) {
+    spec.onUpdate?.(1);
+    spec.onComplete?.();
+    return () => {};
+  }
+
   const ease = spec.easing ?? defaultEase;
   const ticker = Ticker.shared;
   let elapsed = 0;

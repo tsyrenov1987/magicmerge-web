@@ -45,3 +45,18 @@ button {
 #app {
   display: contents;
 }
+
+/* Accessibility — respect prefers-reduced-motion for non-essential
+   animations. Game canvas (PixiJS) tweens are also dampened by reading
+   this media query at runtime in tween.ts.
+   See lib/pixi/tween.ts and components/* CSS keyframes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
