@@ -130,16 +130,22 @@
       const mergeSpot = scene?.slotWorldCenter(outcome.to);
       const artifactToCredit = outcome.artifact;
       const masteredLine = outcome.newlyMastered ? outcome.line : undefined;
+      const isJackpot = outcome.jackpot === true;
+      const chainDepth = outcome.chainSteps?.length ?? 0;
+      const combo = outcome.combo ?? 1;
 
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
-        // Apply optional mastery bonus on top of the base merge state
         const withBonus = masteredLine
           ? applyMasteryBonus(next, masteredLine)
           : next;
         gameState.set(withBonus);
         hapticNotify("success");
         if (mergeSpot) lily?.celebrate(mergeSpot.x, mergeSpot.y);
-        say("praise");
+        // Prioritized dialogue: jackpot > chain > combo > praise
+        if (isJackpot) say("jackpot");
+        else if (chainDepth >= 2) say("chain");
+        else if (combo >= 3) say("combo");
+        else say("praise");
 
         // Artifact drops are silent (no story panel) until the player's
         // first one — then we fire the first_rare lore episode and start

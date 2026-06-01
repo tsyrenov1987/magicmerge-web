@@ -18,6 +18,9 @@ export type DialogueCategory =
   | "greeting"
   | "hint"
   | "praise"
+  | "combo"
+  | "chain"
+  | "jackpot"
   | "sleepy"
   | "no-energy";
 
@@ -31,13 +34,15 @@ type LocalizedTriple = [string, string, string];
 const POOL: Record<DialogueCategory, LocalizedTriple[]> = {
   greeting: [
     ["Привет! Слияния ждут ✨", "Hi! Let's merge ✨", "¡Hola! A fusionar ✨"],
-    ["Я с тобой 🧚", "I'm right here 🧚", "Estoy aquí 🧚"],
-    ["Тапни на генератор — и поехали!", "Tap the generator to begin!", "¡Toca el generador!"],
+    ["Я тут, рядом 🧚‍♀️", "I'm right here 🧚‍♀️", "Aquí estoy 🧚‍♀️"],
+    ["Тапни генератор — и поехали!", "Tap the generator to start!", "¡Toca el generador y empieza!"],
+    ["Доброе утро 💖", "Good to see you 💖", "Qué bueno verte 💖"],
   ],
   hint: [
-    ["Попробуй слить эти!", "Try merging these!", "¡Fusiónalos!"],
-    ["Тут есть пара ✨", "There's a pair here ✨", "Hay un par aquí ✨"],
+    ["Попробуй слить эти!", "Try merging these!", "¡Fusiona estos!"],
+    ["Здесь есть пара ✨", "There's a pair here ✨", "Hay un par aquí ✨"],
     ["Соедини их 💫", "Match them up 💫", "Únelos 💫"],
+    ["Смотри внимательно — пара рядом", "Look — there's a match", "Mira, hay un par cerca"],
   ],
   praise: [
     ["Красиво!", "Lovely!", "¡Precioso!"],
@@ -45,13 +50,31 @@ const POOL: Record<DialogueCategory, LocalizedTriple[]> = {
     ["Так держать", "Keep going", "Sigue así"],
     ["Слияние 💖", "Merged 💖", "¡Fusión! 💖"],
     ["Чудесно", "Wonderful", "Maravilloso"],
+    ["Точно в цель", "Right on", "¡Perfecto!"],
+  ],
+  combo: [
+    ["Комбо! ⚡", "Combo! ⚡", "¡Combo! ⚡"],
+    ["Не останавливайся!", "Don't stop!", "¡No pares!"],
+    ["Цепочка пошла ✨", "Chain's on fire ✨", "¡Cadena encendida! ✨"],
+  ],
+  chain: [
+    ["Каскад! 🌟", "Cascade! 🌟", "¡Cascada! 🌟"],
+    ["Ого, какой каскад", "Whoa, a cascade!", "¡Vaya, qué cascada!"],
+    ["Они посыпались! ✨", "They tumbled together! ✨", "¡Cayeron en cadena! ✨"],
+  ],
+  jackpot: [
+    ["Джекпот! 🎁", "Jackpot! 🎁", "¡Premio gordo! 🎁"],
+    ["Невероятно!", "Incredible!", "¡Increíble!"],
+    ["Два сундука — это сокровище 💎", "Two chests — that's a treasure 💎", "Dos cofres — ¡un tesoro! 💎"],
   ],
   sleepy: [
-    ["Я задремала... 💤", "Drifting off... 💤", "Me adormezco... 💤"],
-    ["Тут так тихо…", "It's quiet…", "Qué tranquilidad…"],
+    ["Я задремала… 💤", "Drifting off… 💤", "Me estoy durmiendo… 💤"],
+    ["Здесь так тихо…", "It's so quiet…", "Qué tranquilidad…"],
+    ["Тссс… 🌙", "Shhh… 🌙", "Shhh… 🌙"],
   ],
   "no-energy": [
-    ["Энергия закончилась — подожди немного 🌙", "Out of energy — rest a bit 🌙", "Sin energía — descansa 🌙"],
+    ["Энергия кончилась — подожди немного 🌙", "Out of energy — rest a bit 🌙", "Sin energía — descansa un poco 🌙"],
+    ["Нужно отдохнуть ⚡", "Time to rest ⚡", "Hora de descansar ⚡"],
   ],
 };
 

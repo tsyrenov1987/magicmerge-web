@@ -90,7 +90,7 @@ export const SPIN_PRIZES: SpinPrizeDef[] = [
   {
     id: "shuffle",
     url: spinPrizeUrl("shuffle"),
-    name: ["Перемешать", "Shuffle", "Mezclar"],
+    name: ["Перемешивание", "Shuffle", "Mezclar"],
     weight: 4,
     booster: { type: "shuffle", amount: 1 },
     accent: 0x8fb3ff,
