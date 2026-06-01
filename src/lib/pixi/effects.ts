@@ -13,7 +13,7 @@
  */
 
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
-import { tweenTo, tweenAlpha, tweenScale, runTween, ease, reducedMotion } from "./tween";
+import { tweenAlpha, tweenScale, runTween, ease, reducedMotion } from "./tween";
 import { LINES, type LineId } from "$lib/game/lines";
 
 const COIN_GOLD = 0xffd96b;

@@ -23,8 +23,6 @@ const WING_FILL = 0xa8d8e8;
 const WING_HIGHLIGHT = 0xe2f4fa;
 const WAND_TIP = 0xffe899;
 const GLOW = 0xff9eff;
-const SPARKLE_COLORS = [0xfff1c2, 0xffe899, 0xf5d9f7, 0xa8d8e8];
-
 const FLY_DURATION = 520;
 const HOVER_OFFSET_Y = -56;
 const CELEBRATE_DURATION = 700;
@@ -41,7 +39,6 @@ export interface LilyOptions {
 export class Lily {
   private parent: Container;
   private root: Container;
-  private sparkleLayer: Container;
   private glow!: Graphics;
 
   /** Procedural placeholder layer — destroyed when HD swaps in. */
@@ -78,11 +75,6 @@ export class Lily {
     this.root.y = this.homeY;
     this.root.eventMode = "none";
     this.parent.addChild(this.root);
-
-    this.sparkleLayer = new Container();
-    this.sparkleLayer.label = "lily:sparkles";
-    this.sparkleLayer.eventMode = "none";
-    this.parent.addChild(this.sparkleLayer);
 
     this.buildGlow();
 
@@ -329,33 +321,6 @@ export class Lily {
     });
   }
 
-  private spawnSparkles(cx: number, cy: number, count: number): void {
-    const s = this.size;
-    for (let i = 0; i < count; i++) {
-      const sparkle = new Graphics();
-      const color = SPARKLE_COLORS[i % SPARKLE_COLORS.length];
-      const r = 2 + Math.random() * 3;
-      sparkle.circle(0, 0, r).fill({ color, alpha: 1 });
-      sparkle.x = cx + (Math.random() - 0.5) * 16;
-      sparkle.y = cy + (Math.random() - 0.5) * 16;
-      this.sparkleLayer.addChild(sparkle);
-
-      const angle = Math.random() * Math.PI * 2;
-      const dist = s * 0.5 + Math.random() * s * 0.6;
-      const endX = sparkle.x + Math.cos(angle) * dist;
-      const endY = sparkle.y + Math.sin(angle) * dist - 6;
-
-      const cancel = tweenTo(sparkle, endX, endY, 600 + Math.random() * 200, ease.outCubic);
-      void cancel;
-      tweenAlpha(sparkle, 1, 0, 700 + Math.random() * 200, ease.outQuad, () => {
-        if (!sparkle.destroyed) {
-          this.sparkleLayer.removeChild(sparkle);
-          sparkle.destroy();
-        }
-      });
-    }
-  }
-
   moveTo(x: number, y: number): void {
     const wasAtHome = this.mood === "idle" && !this.cancelFly;
     this.homeX = x;
@@ -372,7 +337,6 @@ export class Lily {
     this.cancelFly?.();
     this.cancelAlpha?.();
     Ticker.shared.remove(this.tickFn);
-    this.sparkleLayer.destroy({ children: true });
     this.root.destroy({ children: true });
   }
 }
