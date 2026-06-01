@@ -10,6 +10,8 @@
   import { tt, locale } from "$lib/i18n";
   import { haptic, hapticNotify, tg } from "$lib/telegram";
   import { setView } from "$lib/store/ui";
+  import { say, clearDialogue } from "$lib/lily/dialogue";
+  import LilyBubble from "$components/LilyBubble.svelte";
 
   let mountTarget: HTMLDivElement;
   let scene: BoardScene | undefined;
@@ -80,14 +82,12 @@
     if (outcome.kind === "noop") return false;
 
     if (outcome.kind === "merge") {
-      // Capture the merge spot BEFORE the state update — once set, the
-      // rebuild replaces sprites, but slot world centers stay valid since
-      // they're keyed by slot index, not item id.
       const mergeSpot = scene?.slotWorldCenter(outcome.to);
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
         gameState.set(next);
         hapticNotify("success");
         if (mergeSpot) lily?.celebrate(mergeSpot.x, mergeSpot.y);
+        say("praise");
       });
       haptic("heavy");
       noteInteraction();
@@ -107,6 +107,7 @@
   /** Reset the activity timer + send Lily home if she's away. */
   function noteInteraction() {
     lastInteractionMs = performance.now();
+    lastMood = "idle";
     if (lilyAwayFromHome && lily) {
       lily.setMood("idle");
       lily.flyHome(() => {
@@ -124,7 +125,7 @@
 
     if (outcome.kind === "no-energy") {
       hapticNotify("error");
-      flash(msgNoEnergy);
+      say("no-energy");
       return false;
     }
     if (outcome.kind === "no-space") {
@@ -210,6 +211,9 @@
     lilyBehaviorInterval = setInterval(updateLilyBehavior, 1000);
 
     mounted = true;
+    // Greet on first mount (post-microtask so the bubble appears after
+    // the initial paint, not during it)
+    setTimeout(() => say("greeting"), 600);
     return unsubscribe;
   }
 
@@ -218,6 +222,8 @@
   onMount(() => {
     unsubscribePromise = setupPixi();
   });
+
+  let lastMood: "idle" | "attention" | "sleepy" = "idle";
 
   /**
    * Idle-time behavior driver. Inspects gameState + activity timer and
@@ -229,7 +235,13 @@
     const state = get(gameState);
 
     if (idleFor > SLEEPY_DELAY_MS) {
-      if (!lilyAwayFromHome) lily.setMood("sleepy");
+      if (!lilyAwayFromHome) {
+        lily.setMood("sleepy");
+        if (lastMood !== "sleepy") {
+          say("sleepy");
+          lastMood = "sleepy";
+        }
+      }
       return;
     }
 
@@ -242,17 +254,21 @@
             lily.setMood("attention");
             lily.flyTo(targetPos.x, targetPos.y);
             lilyAwayFromHome = true;
+            if (lastMood !== "attention") {
+              say("hint");
+              lastMood = "attention";
+            }
           }
           return;
         }
       }
-      // No pair available — Lily just hangs out, no attention seek.
     }
   }
 
   onDestroy(async () => {
     if (energyTickInterval) clearInterval(energyTickInterval);
     if (lilyBehaviorInterval) clearInterval(lilyBehaviorInterval);
+    clearDialogue();
     resizeObserver?.disconnect();
     const unsubscribe = await unsubscribePromise;
     unsubscribe?.();
@@ -293,7 +309,9 @@
     </div>
   </header>
 
-  <div bind:this={mountTarget} class="canvas-host"></div>
+  <div bind:this={mountTarget} class="canvas-host">
+    <LilyBubble />
+  </div>
 
   <footer>
     <button type="button" class="reset" onclick={handleReset}>{labelReset}</button>
