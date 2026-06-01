@@ -31,7 +31,16 @@ export interface GardenBonuses {
 export function computeGardenBonuses(state: GardenState): GardenBonuses {
   const owned = new Set<BuildingId>();
   for (const plot of state.plots) {
-    if (plot.kind !== "empty") {
+    // Only buildings that have completed initial construction at least
+    // once count. After the first transition to "ready" the plot keeps
+    // cycling through (building/cooldown ↔ ready) and stays owned, so
+    // we need to distinguish the FIRST build (never ready) from the
+    // subsequent cooldowns.
+    if (plot.kind === "ready") {
+      owned.add(plot.building);
+      continue;
+    }
+    if (plot.kind === "building" && (state.everBuilt ?? []).includes(plot.building)) {
       owned.add(plot.building);
     }
   }

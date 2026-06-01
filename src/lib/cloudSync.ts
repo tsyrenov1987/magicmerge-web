@@ -132,6 +132,15 @@ export async function pullSnapshot(): Promise<boolean> {
     if (data.spin) spinState.set(data.spin);
     if (data.streak) streakState.set(data.streak);
     if (data.seenEpisodes) seenEpisodes.set(new Set(data.seenEpisodes));
+    // Seed the dedupe baseline so the immediate subscribe-driven scheduled
+    // upload doesn't write an identical payload back out.
+    lastUploadedJson = JSON.stringify({
+      g: get(gameState),
+      gd: get(gardenState),
+      s: get(spinState),
+      st: get(streakState),
+      se: Array.from(get(seenEpisodes)),
+    });
     return true;
   } catch (e) {
     console.warn("[cloudSync] pull failed", e);

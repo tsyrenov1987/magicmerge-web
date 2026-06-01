@@ -33,6 +33,10 @@ export interface GardenState {
   /** Length = gridSize × gridSize */
   plots: PlotState[];
   artifacts: Partial<Record<ArtifactId, number>>;
+  /** Buildings that completed initial construction at least once.
+   *  Once in this set, the building's global merge bonus applies forever
+   *  — including during collect cooldown. */
+  everBuilt?: BuildingId[];
 }
 
 const STORAGE_KEY = "magicmerge.garden";
@@ -181,12 +185,15 @@ export function creditArtifact(state: GardenState, artifact: ArtifactId, amount:
  */
 export function applyGardenTick(state: GardenState, now: number = Date.now()): GardenState {
   let mutated = false;
+  const everBuilt = new Set(state.everBuilt ?? []);
   const plots = state.plots.map((p) => {
     if (p.kind === "building" && p.buildReadyAt <= now) {
       mutated = true;
+      if (!everBuilt.has(p.building)) everBuilt.add(p.building);
       return { kind: "ready", building: p.building, readyAt: p.buildReadyAt } as PlotState;
     }
     return p;
   });
-  return mutated ? { ...state, plots } : state;
+  if (!mutated) return state;
+  return { ...state, plots, everBuilt: Array.from(everBuilt) };
 }

@@ -180,6 +180,10 @@ export function applyPrestige(state: GameUiState): GameUiState {
     prestige: newPrestige,
     stardust: (state.stardust ?? 0) + 1,
     highestTierThisRun: 1,
+    // Combo chain doesn't carry across runs — without items on the board
+    // the combo can't be continued anyway, but reset for cleanliness.
+    comboCount: 0,
+    lastMergeMs: 0,
     // boosters, coins, masteredLines, energyMax — all preserved
   };
 }
