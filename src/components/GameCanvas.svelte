@@ -12,6 +12,7 @@
   import { say, clearDialogue } from "$lib/lily/dialogue";
   import { trigger as triggerStory, clearSeenEpisodes } from "$lib/lily/story";
   import { gardenState, resetGarden, creditArtifact } from "$lib/store/garden";
+  import { resetSpin } from "$lib/store/spin";
   import { preload } from "$lib/assets/loader";
   import { ESSENTIAL_GAME, itemSpriteUrl, generatorSpriteUrl } from "$lib/assets/manifest";
   import { LINE_IDS } from "$lib/game/lines";
@@ -316,6 +317,7 @@
     if (confirm(confirmReset)) {
       resetGame();
       resetGarden();
+      resetSpin();
       clearSeenEpisodes();
     }
   }

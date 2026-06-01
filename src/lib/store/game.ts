@@ -28,6 +28,13 @@ export interface GameUiState {
   /** Inventory: 4 slots for spawned-but-not-placed items */
   inventory: Array<BoardItem | null>;
   prestige: number;
+  /** Booster inventory — earned via Daily Spin, used via Shop later. */
+  boosters?: {
+    hammer?: number;
+    wand?: number;
+    bomb?: number;
+    shuffle?: number;
+  };
 }
 
 const STORAGE_KEY = "magicmerge.game";

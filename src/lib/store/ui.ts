@@ -11,23 +11,28 @@
 
 import { writable } from "svelte/store";
 
-export type UiView = "landing" | "game" | "garden";
+export type UiView = "landing" | "game" | "garden" | "spin";
 
 const STORAGE_KEY = "magicmerge.ui.view";
 
+function isUiView(v: string | null): v is UiView {
+  return v === "landing" || v === "game" || v === "garden" || v === "spin";
+}
+
 function initialView(): UiView {
-  // URL hints win over localStorage so a shared dev link is honoured
-  // even if the player already has a saved view.
   if (typeof window !== "undefined") {
     const url = new URL(window.location.href);
+    const q = url.searchParams.get("view");
+    if (isUiView(q)) return q;
+    if (url.searchParams.get("spin") === "1") return "spin";
     if (url.searchParams.get("garden") === "1") return "garden";
     if (url.searchParams.get("game") === "1") return "game";
-    if (window.location.hash === "#garden") return "garden";
-    if (window.location.hash === "#game") return "game";
+    const h = window.location.hash.replace(/^#/, "");
+    if (isUiView(h)) return h;
   }
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "landing" || saved === "game" || saved === "garden") return saved;
+    if (isUiView(saved)) return saved;
   }
   return "landing";
 }

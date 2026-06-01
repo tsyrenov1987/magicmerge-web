@@ -2,6 +2,7 @@
   import GameCanvas from "$components/GameCanvas.svelte";
   import ComingSoon from "$components/ComingSoon.svelte";
   import GardenView from "$components/GardenView.svelte";
+  import SpinView from "$components/SpinView.svelte";
   import StoryPanel from "$components/StoryPanel.svelte";
   import { initFirebase } from "$lib/firebase";
   import { tgUser, isInTelegram } from "$lib/telegram";
@@ -17,6 +18,8 @@
   <GameCanvas />
 {:else if $uiView === "garden"}
   <GardenView />
+{:else if $uiView === "spin"}
+  <SpinView />
 {:else}
   <main>
     <ComingSoon {user} {inTg} />
