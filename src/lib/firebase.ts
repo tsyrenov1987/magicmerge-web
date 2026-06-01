@@ -1,16 +1,19 @@
 /**
- * Firebase JS SDK init for the web port.
+ * Firebase JS SDK init.
  *
- * Reuses the same Firebase project as iOS (set via VITE_FIREBASE_* env vars).
- * Anonymous Auth on first launch, then we attach TG user_id as a custom claim
- * via a Cloud Function (planned for Phase 7).
+ * Reuses the same Firebase project as iOS (set via VITE_FIREBASE_* env
+ * vars in Cloudflare Pages). Anonymous Auth on first launch — every
+ * device gets a stable UID for cloud save sync.
  *
- * Stub for now — fills in once env vars + Firebase project access confirmed.
+ * If VITE_FIREBASE_* env vars are missing, the app runs in localStorage-
+ * only mode without crashing. All cloud sync helpers (cloudSync.ts) check
+ * firebase() before doing anything.
  */
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
+import { getAuth, signInAnonymously, onAuthStateChanged, type Auth, type User } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { writable } from "svelte/store";
 
 interface FirebaseHandles {
   app: FirebaseApp;
@@ -19,6 +22,9 @@ interface FirebaseHandles {
 }
 
 let handles: FirebaseHandles | undefined;
+
+/** Reactive auth user — null until sign-in completes (or no Firebase). */
+export const currentUser = writable<User | null>(null);
 
 export function initFirebase(): FirebaseHandles | undefined {
   if (handles) return handles;
@@ -40,6 +46,10 @@ export function initFirebase(): FirebaseHandles | undefined {
   const app = initializeApp(config);
   const auth = getAuth(app);
   const db = getFirestore(app);
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser.set(user);
+  });
 
   signInAnonymously(auth).catch((err) => {
     console.error("[firebase] Anonymous sign-in failed", err);

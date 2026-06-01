@@ -26,7 +26,10 @@
   import PrestigeModal from "$components/PrestigeModal.svelte";
   import ShopModal from "$components/ShopModal.svelte";
   import StoryLogView from "$components/StoryLogView.svelte";
+  import LeaderboardModal from "$components/LeaderboardModal.svelte";
   import { seenEpisodes } from "$lib/lily/story";
+  import { currentUser } from "$lib/firebase";
+  import { enableCloudSync, pullSnapshot, flushAndDisable } from "$lib/cloudSync";
   import { MAX_LEVEL } from "$lib/game/logic";
 
   let mountTarget: HTMLDivElement;
@@ -38,6 +41,7 @@
   let lilyBehaviorInterval: ReturnType<typeof setInterval> | undefined;
   let pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
   let destroyed = false;
+  let cloudAuthUnsub: (() => void) | null = null;
 
   // Behavior tuning
   const ATTENTION_DELAY_MS = 5000;
@@ -72,8 +76,10 @@
   let prestigeOpen = $state(false);
   let shopOpen = $state(false);
   let storyLogOpen = $state(false);
+  let leaderboardOpen = $state(false);
   const labelShop = $derived(tt($locale, "Магазин", "Shop", "Tienda"));
   const labelStoryLog = $derived(tt($locale, "Дневник", "Story Log", "Diario"));
+  const labelLeaderboard = $derived(tt($locale, "Таблица лидеров", "Leaderboard", "Tabla"));
   const seenCount = $derived($seenEpisodes.size);
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
   const confirmReset = $derived(
@@ -318,6 +324,17 @@
     lilyBehaviorInterval = setInterval(updateLilyBehavior, 1000);
 
     mounted = true;
+
+    // Cloud sync — pull remote save first (if newer) then enable
+    // debounced background uploads. No-op if Firebase not configured.
+    let pulledOnce = false;
+    cloudAuthUnsub = currentUser.subscribe(async (user) => {
+      if (!user || pulledOnce) return;
+      pulledOnce = true;
+      await pullSnapshot();
+      enableCloudSync();
+    });
+
     // First-mount narrative beat: greeting bubble, then the intro lore
     // episode (only fires the first time per save). Held in a list so
     // onDestroy can clear them if the user nav'd away mid-delay.
@@ -404,6 +421,8 @@
 
   onDestroy(async () => {
     destroyed = true;
+    cloudAuthUnsub?.();
+    cloudAuthUnsub = null;
     for (const t of pendingTimeouts) clearTimeout(t);
     pendingTimeouts = [];
     if (energyTickInterval) clearInterval(energyTickInterval);
@@ -427,6 +446,7 @@
       resetStreak();
       clearSeenEpisodes();
       void cancelAllPushes();
+      void flushAndDisable(); // wipe the cloud copy of the just-reset state
     }
   }
 </script>
@@ -487,11 +507,22 @@
         <span class="stat-label">📖</span>
       </button>
     {/if}
+    {#if $currentUser}
+      <button
+        type="button"
+        class="stat leaderboard-btn"
+        title={labelLeaderboard}
+        onclick={() => (leaderboardOpen = true)}
+      >
+        <span class="stat-label">🏅</span>
+      </button>
+    {/if}
   </header>
 
   <PrestigeModal bind:open={prestigeOpen} />
   <ShopModal bind:open={shopOpen} />
   <StoryLogView bind:open={storyLogOpen} />
+  <LeaderboardModal bind:open={leaderboardOpen} />
 
   <div bind:this={mountTarget} class="canvas-host">
     <LilyBubble />
@@ -581,6 +612,20 @@
     background: rgba(232, 164, 242, 0.2);
   }
   .log-btn .stat-label {
+    font-size: 18px;
+  }
+  .leaderboard-btn {
+    background: rgba(255, 217, 90, 0.12);
+    border: 1px solid rgba(255, 217, 90, 0.24);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .leaderboard-btn:hover {
+    background: rgba(255, 217, 90, 0.2);
+  }
+  .leaderboard-btn .stat-label {
     font-size: 18px;
   }
   .prestige.ready {
