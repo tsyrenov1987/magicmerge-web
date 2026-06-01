@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { get } from "svelte/store";
   import GameCanvas from "$components/GameCanvas.svelte";
   import ComingSoon from "$components/ComingSoon.svelte";
   import GardenView from "$components/GardenView.svelte";
@@ -30,7 +31,18 @@
     unbindBack?.();
     unbindBack = null;
     if ($uiView !== "landing") {
-      unbindBack = bindBackButton(() => setView("landing"));
+      // BackButton handler checks the shop overlay first. With ShopModal
+      // lifted to App root, an open shop must be the "back" target before
+      // we fall through to view navigation — otherwise tapping back inside
+      // the shop would silently return the player to landing while the
+      // modal stayed open above it.
+      unbindBack = bindBackButton(() => {
+        if (get(shopOpen)) {
+          shopOpen.set(false);
+          return;
+        }
+        setView("landing");
+      });
     }
   });
 
