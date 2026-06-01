@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { get } from "svelte/store";
-  import { gameState, resetGame } from "$lib/store/game";
+  import { gameState, resetGame, applyMasteryBonus } from "$lib/store/game";
+  import type { LineId } from "$lib/game/lines";
+  import type { StoryEvent } from "$lib/lily/story";
   import { getPixiApp, destroyPixiApp } from "$lib/pixi/app";
   import { BoardScene } from "$lib/pixi/boardScene";
   import { Lily } from "$lib/pixi/lily";
@@ -35,9 +37,24 @@
   let lastInteractionMs = performance.now();
   let lilyAwayFromHome = false;
 
+  /** Maps a mastered line to its lore episode trigger id. */
+  const MASTERY_EVENT_FOR_LINE: Record<LineId, StoryEvent> = {
+    roses: "mastery_gift",
+    forge: "mastery_pizza",
+    fleet: "mastery_rocket",
+    fae: "mastery_unicorn",
+    crystals: "mastery_gem",
+    symphony: "mastery_guitar",
+    ocean: "mastery_dolphin",
+    stellar: "mastery_trophy",
+    artifacts: "mastery_phone",
+  };
+
   const labelLevel = $derived(tt($locale, "Уровень", "Level", "Nivel"));
   const labelCoins = $derived(tt($locale, "Монеты", "Coins", "Monedas"));
   const labelEnergy = $derived(tt($locale, "Энергия", "Energy", "Energía"));
+  const labelMastery = $derived(tt($locale, "Мастерство", "Mastery", "Maestría"));
+  const masteryCount = $derived($gameState.masteredLines?.length ?? 0);
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
   const confirmReset = $derived(
     tt(
@@ -90,11 +107,34 @@
 
     if (outcome.kind === "merge") {
       const mergeSpot = scene?.slotWorldCenter(outcome.to);
+      const artifactToCredit = outcome.artifact;
+      const masteredLine = outcome.newlyMastered ? outcome.line : undefined;
+
       scene?.playMergeAnim(outcome.from, outcome.to).then(() => {
-        gameState.set(next);
+        // Apply optional mastery bonus on top of the base merge state
+        const withBonus = masteredLine
+          ? applyMasteryBonus(next, masteredLine)
+          : next;
+        gameState.set(withBonus);
         hapticNotify("success");
         if (mergeSpot) lily?.celebrate(mergeSpot.x, mergeSpot.y);
         say("praise");
+
+        // Artifact drops are silent (no story panel) until the player's
+        // first one — then we fire the first_rare lore episode and start
+        // showing a small toast for subsequent drops.
+        if (artifactToCredit) {
+          gardenState.update((g) => creditArtifact(g, artifactToCredit, 1));
+          triggerStory("first_rare");
+        }
+
+        if (masteredLine) {
+          const evt = MASTERY_EVENT_FOR_LINE[masteredLine];
+          if (evt) triggerStory(evt);
+          // mastery_gift is the meta lore episode shown on the FIRST line
+          // mastered in the whole save. iOS triggers it once.
+          triggerStory("mastery_gift");
+        }
       });
       haptic("heavy");
       noteInteraction();
@@ -337,6 +377,12 @@
       <span class="stat-label">{labelEnergy}</span>
       <span class="stat-value">{$gameState.energy} / {$gameState.energyMax}</span>
     </div>
+    {#if masteryCount > 0}
+      <div class="stat mastery" title={labelMastery}>
+        <span class="stat-label">🏆</span>
+        <span class="stat-value">{masteryCount}/9</span>
+      </div>
+    {/if}
   </header>
 
   <div bind:this={mountTarget} class="canvas-host">
@@ -366,12 +412,16 @@
     user-select: none;
   }
   header {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
     align-items: center;
+    justify-content: space-around;
     gap: 4px;
     padding: 12px 16px;
     background: rgba(0, 0, 0, 0.18);
+  }
+  .mastery .stat-value {
+    color: #ffd96b;
+    font-variant-numeric: tabular-nums;
   }
   .stat {
     display: flex;

@@ -14,7 +14,7 @@ import {
   boardCols,
 } from "$lib/game/logic";
 import { makeItem, makeGenerator, type BoardItem } from "$lib/game/boardItem";
-import { LINE_IDS } from "$lib/game/lines";
+import { LINE_IDS, type LineId } from "$lib/game/lines";
 
 export interface GameUiState {
   level: number;
@@ -35,6 +35,8 @@ export interface GameUiState {
     bomb?: number;
     shuffle?: number;
   };
+  /** Lines the player has mastered (reached L8 in). Bonuses apply forever. */
+  masteredLines?: LineId[];
 }
 
 const STORAGE_KEY = "magicmerge.game";
@@ -115,6 +117,34 @@ export function resetGame(): void {
     localStorage.removeItem(STORAGE_KEY);
   }
   gameState.set(initialState());
+}
+
+/**
+ * Apply a permanent mastery bonus for the given line. Called from the
+ * merge action when a line is newly mastered (first L8 reached).
+ *
+ * Bonuses (subset of iOS for now — the rest land as their dependent
+ * systems come online in Phases 3.D/E):
+ *   forge     → +5 to energy max
+ *   ocean     → energy regen 1.2× faster (lastEnergyTimeMs adjusts via
+ *               ENERGY_REGEN_MS divisor in actions.applyEnergyTick, which
+ *               reads max from state, not a constant)
+ *   artifacts → +1 boosters hammer (small starter pack since mastery_phone
+ *               is mostly cosmetic without surprise spawn yet)
+ *   others    → no mechanical effect yet; lore episode + UI tracking only
+ */
+export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {
+  switch (line) {
+    case "forge":
+      return { ...state, energyMax: state.energyMax + 5 };
+    case "artifacts": {
+      const b = { ...(state.boosters ?? {}) };
+      b.hammer = (b.hammer ?? 0) + 1;
+      return { ...state, boosters: b };
+    }
+    default:
+      return state;
+  }
 }
 
 /** Verify all 9 lines have unique palettes — used in unit tests later. */

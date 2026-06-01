@@ -7,6 +7,8 @@
  */
 
 import { isGenerator, isLuckyChest, type BoardItem } from "./boardItem";
+import { LINES, type LineId } from "./lines";
+import type { ArtifactId } from "$lib/garden/buildings";
 
 export const MAX_LEVEL = 12;
 export const MASTERY_LEVEL = 8;
@@ -21,6 +23,42 @@ export const COMBO_WINDOW_MS = 3_000;
 export const AUTOSAVE_INTERVAL_MS = 15_000;
 
 export const LUCKY_CHEST_CHANCE = 0.015;
+
+/**
+ * Min item tier for the artifact drop roll. Mirrors iOS GameLogic
+ * (L5+ merges roll on the artifact table).
+ */
+export const ARTIFACT_MIN_LEVEL = 5;
+
+/**
+ * Base chance an L5+ merge drops an artifact. Crystal Cave bonus (+20%)
+ * stacks multiplicatively on top of this in Phase 3.E.
+ */
+export const ARTIFACT_BASE_CHANCE = 0.18;
+
+/** Maps line → artifact type produced. Port of iOS Artifact.forLine. */
+export function artifactFor(line: LineId): ArtifactId {
+  switch (line) {
+    case "roses":
+    case "fae":
+      return "pixie_dust";
+    case "forge":
+    case "stellar":
+    case "ocean":
+      return "seed";
+    case "crystals":
+    case "artifacts":
+      return "crystal";
+    case "fleet":
+    case "symphony":
+      return "phoenix_feather";
+  }
+}
+
+/** Pretty-print helper for unit tests / debug overlays */
+export const LINE_DISPLAY = Object.freeze(
+  Object.fromEntries(Object.keys(LINES).map((k) => [k, k])) as Record<LineId, LineId>
+);
 
 /**
  * Sell price progression (v3 balance — 1.95 multiplier).

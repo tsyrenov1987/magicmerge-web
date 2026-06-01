@@ -12,6 +12,10 @@ import {
   calculateSellPrice,
   LUCKY_CHEST_CHANCE,
   ENERGY_REGEN_MS,
+  MASTERY_LEVEL,
+  ARTIFACT_MIN_LEVEL,
+  ARTIFACT_BASE_CHANCE,
+  artifactFor,
 } from "./logic";
 import {
   makeItem,
@@ -22,9 +26,21 @@ import {
 } from "./boardItem";
 import { LINE_IDS, lineFromEmoji, type LineId } from "./lines";
 import type { GameUiState } from "$lib/store/game";
+import type { ArtifactId } from "$lib/garden/buildings";
 
 export type DropOutcome =
-  | { kind: "merge"; from: number; to: number; newLevel: number; coins: number }
+  | {
+      kind: "merge";
+      from: number;
+      to: number;
+      newLevel: number;
+      coins: number;
+      line: LineId;
+      /** Artifact dropped by this merge (L5+ items only), if any */
+      artifact?: ArtifactId;
+      /** True iff THIS merge mastered the line (first L8 in this line) */
+      newlyMastered?: boolean;
+    }
   | { kind: "move"; from: number; to: number }
   | { kind: "swap"; from: number; to: number }
   | { kind: "noop"; reason: "same-cell" | "invalid" | "out-of-bounds" };
@@ -66,7 +82,8 @@ function writeCell(
 export function applyDrop(
   state: GameUiState,
   fromIdx: number,
-  toIdx: number
+  toIdx: number,
+  rng: () => number = Math.random
 ): { next: GameUiState; outcome: DropOutcome } {
   if (fromIdx === toIdx) {
     return { next: state, outcome: { kind: "noop", reason: "same-cell" } };
@@ -113,9 +130,35 @@ export function applyDrop(
 
     const coins = calculateSellPrice(newLevel);
 
+    // L5+ merges roll for an artifact (port of iOS maybeDropArtifact).
+    let artifact: ArtifactId | undefined;
+    if (newLevel >= ARTIFACT_MIN_LEVEL && rng() < ARTIFACT_BASE_CHANCE) {
+      artifact = artifactFor(line);
+    }
+
+    // First L8 (MASTERY_LEVEL) merge in this line = mastery unlock.
+    const mastered = state.masteredLines ?? [];
+    const newlyMastered = newLevel === MASTERY_LEVEL && !mastered.includes(line);
+    const nextMastered = newlyMastered ? [...mastered, line] : mastered;
+
     return {
-      next: { ...state, board, inventory, coins: state.coins + coins },
-      outcome: { kind: "merge", from: fromIdx, to: toIdx, newLevel, coins },
+      next: {
+        ...state,
+        board,
+        inventory,
+        coins: state.coins + coins,
+        masteredLines: nextMastered,
+      },
+      outcome: {
+        kind: "merge",
+        from: fromIdx,
+        to: toIdx,
+        newLevel,
+        coins,
+        line,
+        artifact,
+        newlyMastered: newlyMastered || undefined,
+      },
     };
   }
 
