@@ -22,6 +22,8 @@
   import TabBar from "$components/TabBar.svelte";
   import PrestigeModal from "$components/PrestigeModal.svelte";
   import ShopModal from "$components/ShopModal.svelte";
+  import StoryLogView from "$components/StoryLogView.svelte";
+  import { seenEpisodes } from "$lib/lily/story";
   import { MAX_LEVEL } from "$lib/game/logic";
 
   let mountTarget: HTMLDivElement;
@@ -64,7 +66,10 @@
 
   let prestigeOpen = $state(false);
   let shopOpen = $state(false);
+  let storyLogOpen = $state(false);
   const labelShop = $derived(tt($locale, "Магазин", "Shop", "Tienda"));
+  const labelStoryLog = $derived(tt($locale, "Дневник", "Story Log", "Diario"));
+  const seenCount = $derived($seenEpisodes.size);
   const labelReset = $derived(tt($locale, "Сбросить", "Reset", "Reiniciar"));
   const confirmReset = $derived(
     tt(
@@ -413,10 +418,21 @@
     >
       <span class="stat-label">🛒</span>
     </button>
+    {#if seenCount > 0}
+      <button
+        type="button"
+        class="stat log-btn"
+        title={labelStoryLog}
+        onclick={() => (storyLogOpen = true)}
+      >
+        <span class="stat-label">📖</span>
+      </button>
+    {/if}
   </header>
 
   <PrestigeModal bind:open={prestigeOpen} />
   <ShopModal bind:open={shopOpen} />
+  <StoryLogView bind:open={storyLogOpen} />
 
   <div bind:this={mountTarget} class="canvas-host">
     <LilyBubble />
@@ -484,6 +500,20 @@
     background: rgba(255, 255, 255, 0.14);
   }
   .shop-btn .stat-label {
+    font-size: 18px;
+  }
+  .log-btn {
+    background: rgba(232, 164, 242, 0.1);
+    border: 1px solid rgba(232, 164, 242, 0.22);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .log-btn:hover {
+    background: rgba(232, 164, 242, 0.2);
+  }
+  .log-btn .stat-label {
     font-size: 18px;
   }
   .prestige.ready {

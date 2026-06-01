@@ -388,6 +388,16 @@ export function dismissEpisode(): void {
   activeEpisode.set(null);
 }
 
+/**
+ * Re-open an episode the player has already seen — used by the Story Log.
+ * Unlike trigger(), this is idempotent and does NOT touch seenEpisodes,
+ * so the log can show the panel without changing progression state.
+ */
+export function replayEpisode(event: StoryEvent): void {
+  if (!STORY[event]) return;
+  activeEpisode.set(event);
+}
+
 /** Render a localized field at the current locale. */
 export function localizeTitle(line: StoryLine, loc?: Locale): string {
   const l = loc ?? get(locale);
