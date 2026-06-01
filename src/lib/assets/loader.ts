@@ -21,6 +21,22 @@ import { Assets, Texture } from "pixi.js";
 const textureCache = new Map<string, Texture>();
 const inFlight = new Map<string, Promise<Texture | null>>();
 
+/** Subscribers notified whenever a NEW texture finishes loading. */
+type Listener = (url: string) => void;
+const listeners = new Set<Listener>();
+
+/**
+ * Subscribe to "texture loaded" notifications. Used by BoardScene to
+ * trigger a rebuild when a lazy fetch completes — without that, the
+ * procedural fallback persists until the next player action.
+ *
+ * Returns an unsubscribe function for clean teardown.
+ */
+export function onTextureLoaded(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 /**
  * Load a texture from URL. Idempotent — subsequent calls for the same URL
  * return the cached texture. Returns null if loading fails.
@@ -36,6 +52,9 @@ export async function loadTexture(url: string): Promise<Texture | null> {
     .then((tex: Texture) => {
       textureCache.set(url, tex);
       inFlight.delete(url);
+      for (const fn of listeners) {
+        try { fn(url); } catch (e) { console.warn("[assets] listener threw", e); }
+      }
       return tex;
     })
     .catch((err: unknown) => {

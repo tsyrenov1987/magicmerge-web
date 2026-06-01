@@ -20,7 +20,7 @@
 import { writable } from "svelte/store";
 import { tg } from "$lib/telegram";
 import type { ArtifactId, BuildingId } from "$lib/garden/buildings";
-import { BUILDINGS } from "$lib/garden/buildings";
+import { BUILDINGS, meetsArtifactReqs } from "$lib/garden/buildings";
 
 export type PlotState =
   | { kind: "empty" }
@@ -110,6 +110,9 @@ export function applyBuild(
   now: number = Date.now()
 ): { next: GardenState; nextCoins: number; outcome: GardenActionOutcome } {
   const def = BUILDINGS[building];
+  if (!def) {
+    return { next: state, nextCoins: coins, outcome: { kind: "noop" } };
+  }
   const plot = state.plots[idx];
   if (!plot || plot.kind !== "empty") {
     return { next: state, nextCoins: coins, outcome: { kind: "occupied" } };
@@ -117,6 +120,13 @@ export function applyBuild(
   if (coins < def.coinCost) {
     return { next: state, nextCoins: coins, outcome: { kind: "no-coins" } };
   }
+  // Block locked buildings even if UI got out of sync
+  if (!meetsArtifactReqs(def, state.artifacts)) {
+    return { next: state, nextCoins: coins, outcome: { kind: "noop" } };
+  }
+  // Consume artifact requirements (currently only mass — buildings keep
+  // requirements satisfied, no spending. iOS does the same.)
+  // Reserved here for future "single-use artifact" buildings.
   const plots = state.plots.slice();
   plots[idx] = { kind: "building", building, buildReadyAt: now + def.buildMs };
   return {
@@ -150,6 +160,18 @@ export function applyCollect(
     next: { ...state, plots },
     coinsReward: def.rewardCoins,
     outcome: { kind: "collected", idx, building: plot.building, coins: def.rewardCoins },
+  };
+}
+
+/**
+ * Credit one artifact to the player's pool. Called when L5+ merges
+ * roll an artifact drop (Phase 3.C+) and when lucky chests resolve.
+ */
+export function creditArtifact(state: GardenState, artifact: ArtifactId, amount: number = 1): GardenState {
+  const current = state.artifacts[artifact] ?? 0;
+  return {
+    ...state,
+    artifacts: { ...state.artifacts, [artifact]: current + amount },
   };
 }
 

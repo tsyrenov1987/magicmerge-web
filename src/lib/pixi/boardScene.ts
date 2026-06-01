@@ -13,6 +13,7 @@ import { Container, Graphics, FederatedPointerEvent } from "pixi.js";
 import { createItemSprite } from "./itemSprite";
 import { tweenTo, tweenAlpha, squashPulse, ease } from "./tween";
 import { isGenerator, type BoardItem } from "$lib/game/boardItem";
+import { onTextureLoaded } from "$lib/assets/loader";
 
 export interface BoardSceneOptions {
   parent: Container;
@@ -69,6 +70,12 @@ export class BoardScene {
   /** True if slot is a generator (used to distinguish tap vs drag) */
   private isGeneratorAt: boolean[] = [];
 
+  /** Snapshot of last rebuild state so a texture-loaded callback can re-render. */
+  private lastBuild: { cols: number; board: Array<BoardItem | null>; inventory: Array<BoardItem | null> } | null = null;
+  private unsubscribeTexture: (() => void) | null = null;
+  /** Coalesce many texture-loaded events into a single rebuild via rAF. */
+  private rebuildScheduled = false;
+
   /** Drag state */
   private dragging:
     | {
@@ -110,7 +117,23 @@ export class BoardScene {
     this.parent.on("pointerup", this.handlePointerUp);
     this.parent.on("pointerupoutside", this.handlePointerUp);
 
+    // When a lazy texture finishes loading, refresh from the last
+    // known state so the procedural fallback upgrades to the real
+    // sprite without waiting for a player action.
+    this.unsubscribeTexture = onTextureLoaded(() => this.scheduleRebuild());
+
     this.resize(opts.width, opts.height);
+  }
+
+  private scheduleRebuild(): void {
+    if (this.rebuildScheduled) return;
+    this.rebuildScheduled = true;
+    requestAnimationFrame(() => {
+      this.rebuildScheduled = false;
+      if (!this.lastBuild) return;
+      const { cols, board, inventory } = this.lastBuild;
+      this.rebuild(cols, board, inventory);
+    });
   }
 
   resize(width: number, height: number, cols?: number, invSize?: number): void {
@@ -167,6 +190,10 @@ export class BoardScene {
     this.boardCols = cols;
     this.boardCellCount = cols * cols;
     this.inventorySize = inventoryItems.length;
+
+    // Remember for scheduleRebuild() — texture-load callbacks rebuild
+    // from this snapshot without needing the caller to pass state again.
+    this.lastBuild = { cols, board: boardItems, inventory: inventoryItems };
 
     this.cancelDrag(false);
 
@@ -517,6 +544,10 @@ export class BoardScene {
     this.parent.off("globalpointermove", this.handlePointerMove);
     this.parent.off("pointerup", this.handlePointerUp);
     this.parent.off("pointerupoutside", this.handlePointerUp);
+    this.unsubscribeTexture?.();
+    this.unsubscribeTexture = null;
+    this.lastBuild = null;
+    this.rebuildScheduled = false;
     this.root.destroy({ children: true });
   }
 }
