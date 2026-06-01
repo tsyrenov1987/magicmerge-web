@@ -6,6 +6,7 @@
   import { gardenState, applyBuild, applyCollect, applyGardenTick } from "$lib/store/garden";
   import { BUILDINGS, BUILDING_IDS, meetsArtifactReqs, ARTIFACT_IDS, artifactEmoji, artifactName, type BuildingId, type BuildingDef } from "$lib/garden/buildings";
   import { buildingSpriteUrl } from "$lib/assets/manifest";
+  import { schedulePush } from "$lib/notifications";
   import { locale, tt } from "$lib/i18n";
   import { haptic, hapticNotify } from "$lib/telegram";
   import TabBar from "$components/TabBar.svelte";
@@ -87,6 +88,23 @@
     gardenState.set(next);
     gameState.update((g) => ({ ...g, coins: nextCoins }));
     haptic("medium");
+
+    // Schedule a push notification when this building will be ready
+    const def = BUILDINGS[building];
+    const firingAt = Date.now() + def.buildMs;
+    const name = tt($locale, def.name[0], def.name[1], def.name[2]);
+    const text = tt(
+      $locale,
+      `🌷 ${name} готов к сбору`,
+      `🌷 ${name} is ready to harvest`,
+      `🌷 ${name} listo para cosechar`
+    );
+    void schedulePush({
+      kind: "building_ready",
+      firingAt,
+      text,
+      deeplinkView: "garden",
+    });
   }
 
   onMount(() => {

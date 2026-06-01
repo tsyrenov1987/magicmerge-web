@@ -1,0 +1,21 @@
+name = "magicmerge-bot"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 1Hz cron — fires the scheduler to dispatch due notifications.
+[triggers]
+crons = ["*/1 * * * *"]
+
+# KV namespace for scheduled-notification queue + user prefs.
+# Replace the id with the value from `wrangler kv namespace create NOTIFICATIONS`
+# after first run. See DEPLOY.md.
+[[kv_namespaces]]
+binding = "NOTIFICATIONS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Bot token stored as encrypted secret (set via `wrangler secret put TG_BOT_TOKEN`).
+# WebApp Origin used for CORS allowlist on /api/* endpoints.
+[vars]
+WEBAPP_ORIGIN = "https://magicmerge-web.pages.dev"
+MINI_APP_URL = "https://t.me/MagicMerge1bot/play"

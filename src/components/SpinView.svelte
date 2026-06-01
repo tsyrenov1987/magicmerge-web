@@ -9,6 +9,7 @@
     markSpinUsed,
   } from "$lib/store/spin";
   import { SPIN_PRIZES, rollPrize, prizeIndex, type SpinPrizeDef } from "$lib/spin/prizes";
+  import { schedulePush } from "$lib/notifications";
   import { locale, tt } from "$lib/i18n";
   import { haptic, hapticNotify } from "$lib/telegram";
   import TabBar from "$components/TabBar.svelte";
@@ -91,6 +92,20 @@
       showResult = true;
       markSpinUsed();
       hapticNotify(prize.id === "jackpot" ? "success" : "warning");
+
+      // Schedule a push 24h from now reminding the player the wheel is ready
+      const reminder = tt(
+        $locale,
+        "🎡 Колесо снова крутится — забери награду!",
+        "🎡 The wheel is ready — claim your prize!",
+        "🎡 La ruleta está lista — ¡reclama tu premio!"
+      );
+      void schedulePush({
+        kind: "spin_available",
+        firingAt: Date.now() + 24 * 60 * 60_000,
+        text: reminder,
+        deeplinkView: "spin",
+      });
     }, 4200);
   }
 

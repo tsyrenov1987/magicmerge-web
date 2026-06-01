@@ -11,3 +11,8 @@ dist/
 .vscode/
 
 # Build outputs only — public assets are tracked.
+
+# Bot server build artifacts
+bot-server/node_modules/
+bot-server/.wrangler/
+bot-server/dist/

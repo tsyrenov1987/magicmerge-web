@@ -17,6 +17,7 @@
   import { resetSpin } from "$lib/store/spin";
   import { preload } from "$lib/assets/loader";
   import { ESSENTIAL_GAME, itemSpriteUrl, generatorSpriteUrl } from "$lib/assets/manifest";
+  import { schedulePush, cancelAllPushes } from "$lib/notifications";
   import { LINE_IDS } from "$lib/game/lines";
   import LilyBubble from "$components/LilyBubble.svelte";
   import TabBar from "$components/TabBar.svelte";
@@ -202,6 +203,29 @@
     // Spawned successfully.
     gameState.set(next);
     haptic(outcome.isLucky ? "heavy" : "medium");
+
+    // Schedule an "energy full" push if the bar isn't currently full.
+    // The Worker dedupes by kind so each spawn supersedes the previous
+    // estimate — no spam.
+    if (next.energy < next.energyMax) {
+      const regenTier = next.upgrades?.regenSpeedBoost ?? 0;
+      const regenIntervalMs = 60_000 * Math.pow(0.9, regenTier);
+      const ticksRemaining = next.energyMax - next.energy;
+      const fullAt = next.lastEnergyTimeMs + ticksRemaining * regenIntervalMs;
+      const energyText = tt(
+        $locale,
+        "⚡ Энергия полная — пора играть!",
+        "⚡ Energy is full — time to play!",
+        "⚡ Energía al máximo — ¡a jugar!"
+      );
+      void schedulePush({
+        kind: "energy_full",
+        firingAt: fullAt,
+        text: energyText,
+        deeplinkView: "game",
+      });
+    }
+
     if (outcome.isLucky) {
       hapticNotify("success");
       flash(msgLucky);
@@ -374,6 +398,7 @@
       resetGarden();
       resetSpin();
       clearSeenEpisodes();
+      void cancelAllPushes();
     }
   }
 </script>
