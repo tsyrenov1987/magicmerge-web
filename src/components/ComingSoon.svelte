@@ -1,7 +1,6 @@
 <script lang="ts">
   import { locale, tt, setLocale, type Locale } from "$lib/i18n";
   import { setView } from "$lib/store/ui";
-  import { BG_NIGHT } from "$lib/assets/manifest";
   import AboutModal from "$components/AboutModal.svelte";
   import ReferralModal from "$components/ReferralModal.svelte";
   import TasksModal from "$components/TasksModal.svelte";

@@ -175,10 +175,13 @@
         {#each $tasksStatus as task (task.id)}
           {@const meta = taskMeta[task.id]}
           {@const cta = ctaAction(task)}
+          <!-- If the server ships a new TaskId before we've shipped the
+               client copy (deploy drift), we still render a usable row
+               with the raw id + reward so the user can claim. -->
           <li class="task" class:done={task.state === "claimed"}>
             <div class="task-text">
-              <div class="task-title">{meta.title()}</div>
-              <div class="task-sub">{meta.sub()}</div>
+              <div class="task-title">{meta ? meta.title() : task.id}</div>
+              <div class="task-sub">{meta ? meta.sub() : ""}</div>
               <div class="task-reward">{rewardLabel(task.reward)}</div>
             </div>
             <div class="task-actions">

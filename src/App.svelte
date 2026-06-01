@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import GameCanvas from "$components/GameCanvas.svelte";
   import ComingSoon from "$components/ComingSoon.svelte";
   import GardenView from "$components/GardenView.svelte";

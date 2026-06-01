@@ -300,8 +300,12 @@ export function applyReferralReward(
   reward: { kind: "energy" | "lucky_chest" | "coins"; amount: number }
 ): GameUiState {
   if (reward.kind === "energy") {
+    // Soft cap at 1.5x energyMax to discourage stuffing via burst invites,
+    // but NEVER reduce existing energy — Stars purchases (e.g. mega energy)
+    // legitimately push past the cap and we mustn't silently roll them back.
     const cap = Math.floor(state.energyMax * 1.5);
-    return { ...state, energy: Math.min(cap, state.energy + reward.amount) };
+    const target = Math.min(cap, state.energy + reward.amount);
+    return { ...state, energy: Math.max(state.energy, target) };
   }
   if (reward.kind === "lucky_chest") {
     return {
