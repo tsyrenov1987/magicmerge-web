@@ -28,7 +28,7 @@
 import { doc, getDoc, setDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { get } from "svelte/store";
 import { firebase, currentUser } from "./firebase";
-import { gameState, type GameUiState } from "./store/game";
+import { gameState, migrateLoadedState, type GameUiState } from "./store/game";
 import { gardenState, type GardenState } from "./store/garden";
 import { spinState, type SpinState } from "./store/spin";
 import { streakState, type StreakState } from "./store/streak";
@@ -127,7 +127,10 @@ export async function pullSnapshot(): Promise<boolean> {
       return false;
     }
 
-    if (data.game) gameState.set(data.game);
+    // Migrate before set so older cloud saves (created before the
+    // mastery-driven board growth landed) get their boardCols bumped
+    // to match their masteredLines progress on first device-sync.
+    if (data.game) gameState.set(migrateLoadedState(data.game));
     if (data.garden) gardenState.set(data.garden);
     if (data.spin) spinState.set(data.spin);
     if (data.streak) streakState.set(data.streak);

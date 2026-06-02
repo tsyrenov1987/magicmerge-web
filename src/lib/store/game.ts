@@ -82,6 +82,26 @@ function seedBoard(cols: number): Array<BoardItem | null> {
   return cells;
 }
 
+/**
+ * One-shot migration applied to ANY loaded state (localStorage or cloud).
+ *
+ * Up through 2026-06-01 the board never grew from mastery progress (the
+ * mastery-driven formula landed that day), so existing saves can have
+ * masteredLines ≥ 3 but boardCols still stuck at 4. Recompute the
+ * desired size against the new formula and grow if the save is behind.
+ *
+ * Does not shrink — players don't lose space if a future tuning lowers
+ * a threshold.
+ */
+export function migrateLoadedState(state: GameUiState): GameUiState {
+  const masteryCount = state.masteredLines?.length ?? 0;
+  const targetCols = masteryBoardCols(masteryCount, state.prestige ?? 0);
+  if (targetCols > state.boardCols) {
+    return growBoardTo(state, targetCols);
+  }
+  return state;
+}
+
 function initialState(): GameUiState {
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -89,7 +109,7 @@ function initialState(): GameUiState {
       try {
         const parsed = JSON.parse(saved) as SavedShape;
         if (parsed.v === SCHEMA_VERSION && parsed.state) {
-          return parsed.state;
+          return migrateLoadedState(parsed.state);
         }
         console.warn("[game] Save schema mismatch, resetting");
       } catch (e) {
