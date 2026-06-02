@@ -9,9 +9,8 @@
 import { writable } from "svelte/store";
 import { tg } from "$lib/telegram";
 import {
-  BOARD_COLS_MIN,
   ENERGY_MAX,
-  boardCols,
+  masteryBoardCols,
 } from "$lib/game/logic";
 import { makeItem, makeGenerator, type BoardItem } from "$lib/game/boardItem";
 import { LINE_IDS, type LineId } from "$lib/game/lines";
@@ -98,7 +97,9 @@ function initialState(): GameUiState {
       }
     }
   }
-  const cols = boardCols(1, 0);
+  // Fresh save: 0 masteries, 0 prestige → 4×4. Same answer as before but
+  // expressed through the mastery-driven formula for consistency.
+  const cols = masteryBoardCols(0, 0);
   return {
     level: 1,
     coins: 50,
@@ -169,7 +170,11 @@ export function resetGame(): void {
  */
 export function applyPrestige(state: GameUiState): GameUiState {
   const newPrestige = state.prestige + 1;
-  const newCols = Math.min(8, state.boardCols + 1);
+  // Use the mastery-driven formula so prestige + mastery progress
+  // compose naturally instead of just adding 1 to whatever cols the
+  // player happened to be at.
+  const masteryCount = state.masteredLines?.length ?? 0;
+  const newCols = masteryBoardCols(masteryCount, newPrestige);
   const cells = new Array<BoardItem | null>(newCols * newCols).fill(null);
   // Place a single generator near the center so the new run can begin
   const genIdx = newCols + 1;
@@ -319,18 +324,50 @@ export function applyReferralReward(
   return state;
 }
 
+/**
+ * Resize the board grid to `newCols` × `newCols`, preserving items by
+ * copying them to the same (row, col) position in the larger grid. New
+ * cells along the right edge and bottom row start empty. Caller must
+ * have already checked newCols > current; this function does not shrink.
+ */
+function growBoardTo(state: GameUiState, newCols: number): GameUiState {
+  const oldCols = state.boardCols;
+  if (newCols <= oldCols) return state;
+  const newBoard = new Array<BoardItem | null>(newCols * newCols).fill(null);
+  for (let r = 0; r < oldCols; r++) {
+    for (let c = 0; c < oldCols; c++) {
+      newBoard[r * newCols + c] = state.board[r * oldCols + c] ?? null;
+    }
+  }
+  return { ...state, boardCols: newCols, board: newBoard };
+}
+
 export function applyMasteryBonus(state: GameUiState, line: LineId): GameUiState {
+  // Per-line cosmetic / stat bonus.
+  let next = state;
   switch (line) {
     case "forge":
-      return { ...state, energyMax: state.energyMax + 5 };
+      next = { ...state, energyMax: state.energyMax + 5 };
+      break;
     case "artifacts": {
       const b = { ...(state.boosters ?? {}) };
       b.hammer = (b.hammer ?? 0) + 1;
-      return { ...state, boosters: b };
+      next = { ...state, boosters: b };
+      break;
     }
-    default:
-      return state;
   }
+
+  // Mastery-driven board growth. masteredLines was already updated in
+  // applyDrop's merge branch, so reading it here reflects the new count
+  // including the line we just mastered. If the new mastery count crosses
+  // a board-size threshold (3 or 6), grow the grid in-place: copy old
+  // cells into the top-left of a larger grid, fill the rest with null.
+  const masteryCount = next.masteredLines?.length ?? 0;
+  const targetCols = masteryBoardCols(masteryCount, next.prestige);
+  if (targetCols > next.boardCols) {
+    next = growBoardTo(next, targetCols);
+  }
+  return next;
 }
 
 /** Verify all 9 lines have unique palettes — used in unit tests later. */

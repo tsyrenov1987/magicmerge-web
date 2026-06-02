@@ -48,7 +48,18 @@ export interface AttributeResult {
   status: "new" | "duplicate" | "self";
 }
 
-const DAILY_REWARD_CAP = 5;
+/**
+ * Daily reward cap (UTC).
+ *
+ * Tuned 5 → 3 after balance audit: 5 friends/day at +1 Lucky Chest each
+ * meant ~5 jackpot-pairs per day from MGM alone, swamping the natural
+ * 1.5% generator-tap drop rate and undercutting Stars coin packs. At 3,
+ * a fully-engaged player still gets 90 energy + 3 chests/day from
+ * referrals — meaningful, not absurd. Counter still increments past 3
+ * so the invite_3_friends Task milestone fires normally; only the
+ * reward mint stops.
+ */
+const DAILY_REWARD_CAP = 3;
 
 // Per-referral bundle for the REFERRER (matches user-chosen reward spec)
 const REWARD_PER_REFERRAL: ReferralReward[] = [

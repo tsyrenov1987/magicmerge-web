@@ -97,16 +97,40 @@ export function tournamentPoints(level: number): number {
 }
 
 /**
- * Dynamic board size — square side grows with player level + prestige.
- * 4×4 base → +1 side at level 5/11/21 milestones → +1 per prestige → capped at 8×8.
+ * Dynamic board size — square side grows with mastery progress + prestige.
+ *
+ * Previous formula keyed off `state.level`, but `level` was never
+ * incremented anywhere in the codebase, so the milestone bumps were
+ * dead code and every new player stayed on 4×4 until first prestige —
+ * which itself requires hitting MAX_LEVEL (tier 12), nearly impossible
+ * on a 4×4. Replaced with a mastery-driven curve so the board breathes
+ * as the player completes lines.
+ *
+ * Progression:
+ *   0-2 masteries → 4×4 (early game, learn the loop)
+ *   3-5 masteries → 5×5 (mid game, room to set up combos)
+ *   6+ masteries → 6×6 (late game, mastery-tier headroom)
+ *   Each prestige adds +1 on top, capped at 8×8.
+ */
+export function masteryBoardCols(masteryCount: number, prestige: number): number {
+  let base: number;
+  if (masteryCount < 3) base = 4;
+  else if (masteryCount < 6) base = 5;
+  else base = 6;
+  return Math.min(BOARD_COLS_MAX, base + Math.max(0, prestige));
+}
+
+/**
+ * Kept for backwards-compat with any external callers / iOS parity:
+ * delegates to masteryBoardCols with level mapped to a mastery proxy.
+ * Prefer masteryBoardCols in new code.
  */
 export function boardCols(level: number, prestige: number): number {
-  let byLevel: number;
-  if (level < 5) byLevel = 4;
-  else if (level < 11) byLevel = 5;
-  else if (level < 21) byLevel = 6;
-  else byLevel = 7;
-  return Math.min(BOARD_COLS_MAX, byLevel + Math.max(0, prestige));
+  // Approximate the old level milestones as mastery thresholds for
+  // any caller still passing a raw level: lv<5 ~ 0 masteries, lv<11 ~ 3,
+  // lv<21 ~ 6, else 9.
+  const mastery = level < 5 ? 0 : level < 11 ? 3 : level < 21 ? 6 : 9;
+  return masteryBoardCols(mastery, prestige);
 }
 
 /**
