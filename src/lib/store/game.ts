@@ -120,10 +120,16 @@ function initialState(): GameUiState {
   // Fresh save: 0 masteries, 0 prestige → 4×4. Same answer as before but
   // expressed through the mastery-driven formula for consistency.
   const cols = masteryBoardCols(0, 0);
+  // Onboarding tuning (audit 2026-06-01):
+  // - coins 50 → 100 — affords 3 hammers or 1 shuffle out of the gate
+  //   so new players have a tool to clear unwanted spawns instead of
+  //   waiting on regen
+  // - energy 30 → 60 — doubles the first-session play length before
+  //   the player hits a forced break
   return {
     level: 1,
-    coins: 50,
-    energy: 30,
+    coins: 100,
+    energy: 60,
     energyMax: ENERGY_MAX,
     lastEnergyTimeMs: Date.now(),
     boardCols: cols,

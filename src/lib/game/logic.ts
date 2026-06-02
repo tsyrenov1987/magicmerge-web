@@ -11,7 +11,18 @@ import { LINES, type LineId } from "./lines";
 import type { ArtifactId } from "$lib/garden/buildings";
 
 export const MAX_LEVEL = 12;
-export const MASTERY_LEVEL = 8;
+/**
+ * Tier required to "master" a line.
+ *
+ * Tuned 8 → 7 after the 2026-06-01 playability audit. L8 demanded ~128
+ * same-line items per mastery; with uniform 1/9 random spawn that
+ * translated to ~1150 generator taps (≈19 hours of regen) for one
+ * mastery, and 9 of them gates everything from board growth past 5×5
+ * to most garden artifact rolls. L7 halves the items-per-mastery cost
+ * to ~64, putting the first three masteries (5×5 unlock) within a
+ * handful of focused sessions instead of a week.
+ */
+export const MASTERY_LEVEL = 7;
 export const INVENTORY_SIZE = 4;
 export const BOARD_COLS_MIN = 4;
 export const BOARD_COLS_MAX = 8;
@@ -19,10 +30,25 @@ export const BOARD_COLS_MAX = 8;
 export const ENERGY_MAX = 140;
 export const ENERGY_REGEN_MS = 60_000;
 export const DAILY_BONUS_MS = 86_400_000;
-export const COMBO_WINDOW_MS = 3_000;
+/**
+ * Combo window — merges within this many ms of the last merge keep
+ * the combo counter alive. Tuned 3_000 → 4_000 (audit 2026-06-01):
+ * 3s often expired right as the player's eyes were tracking the
+ * chain-trail animation; 4s respects the ~700ms merge animation +
+ * a more natural beat between taps.
+ */
+export const COMBO_WINDOW_MS = 4_000;
 export const AUTOSAVE_INTERVAL_MS = 15_000;
 
-export const LUCKY_CHEST_CHANCE = 0.015;
+/**
+ * Per-generator-tap chance of spawning a Lucky Chest instead of a
+ * regular item. Tuned 0.015 → 0.020 (audit 2026-06-01): natural
+ * organic chest rate was ~1 per 67 taps, vs MGM's capped 3/day. The
+ * bump still keeps chests "rare-feeling" (1 per 50 taps) while
+ * making solo play feel less starved of jackpot moments now that
+ * referral chests are capped.
+ */
+export const LUCKY_CHEST_CHANCE = 0.020;
 
 /**
  * Min item tier for the artifact drop roll. Mirrors iOS GameLogic
